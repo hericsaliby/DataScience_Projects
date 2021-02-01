@@ -10,7 +10,7 @@
 **Background in:** Python, Machine Learning, Space Operations and Mathematical Optimisation.
 
 **Links:**
-* [LinkedIn](https://www.linkedin.com/in/heric-frederic-turmann-saliby-05940612a/)
+* [LinkedIn](https://bit.ly/3rihEQN)
 * [Medium](https://medium.com/@blackbull0075)
 
 
