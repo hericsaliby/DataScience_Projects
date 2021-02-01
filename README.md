@@ -16,7 +16,7 @@
 
 ## Projetos:
 
-**Analisando os dados do Airbnb de Los Angeles**
+**Analisando os dados do Airbnb de Los Angeles:** http://bit.ly/3rd3bW0
 
 
 
