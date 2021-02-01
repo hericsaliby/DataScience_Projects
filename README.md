@@ -11,7 +11,7 @@
 
 **Links:**
 * [LinkedIn](https://www.linkedin.com/in/heric-frederic-turmann-saliby-05940612a/)
-* [Medium](https://www.medium.com)
+* [Medium](https://medium.com/@blackbull0075)
 
 
 ## Projetos:
