@@ -16,6 +16,7 @@ Previsão de pesca para a Grande Florianópolis: junta vento (GFS, ECMWF ou ICON
 |---|---|
 | **Mapa** | Mapa (ruas ou satélite) com todos os pontos e a nota do horário escolhido. Toque em qualquer lugar para soltar um pin: o app busca a previsão daquele local e calcula o abrigo sozinho. Depois é só dar um nome e salvar como "meu ponto". |
 | **Abrigo automático do pin** | Para 16 direções, o app consulta a altitude do terreno (Copernicus DEM pela Open-Meteo) de 0,4 a 25 km de distância. Terra perto e morro alto naquela direção significam abrigo; água aberta por mais de 25 km significa ondulação de mar aberto. O tipo (costão, praia, baía) é sugerido e pode ser trocado. |
+| **Meus pontos (privados)** | Pins salvos ficam só no aparelho de quem marcou; quem recebe o link não vê. Backup com "Exportar/Importar meus pontos" e importação do Google Maps: KML do Meus Mapas, "Saved Places.json" ou CSV de listas do Google Takeout, ou coordenadas coladas. |
 | **Lua e solunar** | Fase com o desenho da lua como se vê do hemisfério sul, iluminação, idade, nascer, pôr e passagem da lua, períodos principais (~2 h em torno da lua no meridiano) e secundários (~1 h em torno do nascer e do pôr), nota de atividade de 1 a 4 para cada dia, curva de atividade hora a hora e as próximas fases com data. A fase da lua também entra na nota de pesca. |
 | **Unidade do vento** | km/h por padrão, com opção de nós ou m/s no topo. |
 | **Onde ir** | Ranking dos 18 pontos para o horário escolhido, com o motivo de cada nota (abrigado/exposto, maré, mar, lua). |
