@@ -16,6 +16,8 @@ Previsão de pesca para a Grande Florianópolis: junta vento (GFS, ECMWF ou ICON
 |---|---|
 | **Mapa** | Mapa (ruas ou satélite) com todos os pontos e a nota do horário escolhido. Toque em qualquer lugar para soltar um pin: o app busca a previsão daquele local e calcula o abrigo sozinho. Depois é só dar um nome e salvar como "meu ponto". |
 | **Abrigo automático do pin** | Para 16 direções, o app consulta a altitude do terreno (Copernicus DEM pela Open-Meteo) de 0,4 a 25 km de distância. Terra perto e morro alto naquela direção significam abrigo; água aberta por mais de 25 km significa ondulação de mar aberto. O tipo (costão, praia, baía) é sugerido e pode ser trocado. |
+| **Lua e solunar** | Fase com o desenho da lua como se vê do hemisfério sul, iluminação, idade, nascer, pôr e passagem da lua, períodos principais (~2 h em torno da lua no meridiano) e secundários (~1 h em torno do nascer e do pôr), nota de atividade de 1 a 4 para cada dia, curva de atividade hora a hora e as próximas fases com data. A fase da lua também entra na nota de pesca. |
+| **Unidade do vento** | km/h por padrão, com opção de nós ou m/s no topo. |
 | **Onde ir** | Ranking dos 18 pontos para o horário escolhido, com o motivo de cada nota (abrigado/exposto, maré, mar, lua). |
 | **Abrigo** | Cada ponto tem uma rosa de exposição em 8 setores para vento e outra para ondulação. O vento "no ponto" é o vento aberto reduzido pelo abrigo. |
 | **Modelos** | GFS, ECMWF IFS 0.25 e ICON. A faixa no gráfico mostra o quanto os modelos discordam: faixa larga significa previsão incerta. |
@@ -42,7 +44,7 @@ python ml/analisar_diario.py diario-pesca.json
 
 O script de calibração usa a API de previsões históricas da Open-Meteo (o que o GFS previu de fato em cada hora), valida no período final dos dados para não superestimar o ganho e compara com um GradientBoosting.
 
-Todo o vento é mostrado em km/h.
+O vento vem em km/h por padrão (dá para trocar para nós ou m/s no topo do app).
 
 ## Ajustar os pontos
 
