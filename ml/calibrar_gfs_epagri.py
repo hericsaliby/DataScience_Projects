@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-KN = {"ms": 1.94384, "kmh": 0.539957, "kn": 1.0}
+KMH = {"ms": 3.6, "kmh": 1.0, "kn": 1.852}
 
 
 def ler_estacao(caminho, unidade):
@@ -61,7 +61,7 @@ def ler_estacao(caminho, unidade):
     t = pd.to_datetime(texto, dayfirst=True, errors="coerce")
     out = pd.DataFrame({
         "t": t.dt.floor("h"),
-        "obs": pd.to_numeric(df[c_vel], errors="coerce") * KN[unidade],
+        "obs": pd.to_numeric(df[c_vel], errors="coerce") * KMH[unidade],
         "dir_obs": pd.to_numeric(df[c_dir], errors="coerce") if c_dir else np.nan,
     }).dropna(subset=["t", "obs"])
     return out.groupby("t", as_index=False).mean()
@@ -71,7 +71,7 @@ def buscar_modelo(lat, lon, ini, fim, modelo):
     url = "https://historical-forecast-api.open-meteo.com/v1/forecast"
     p = dict(latitude=lat, longitude=lon, start_date=ini, end_date=fim,
              hourly="wind_speed_10m,wind_direction_10m", models=modelo,
-             wind_speed_unit="kn", timezone="America/Sao_Paulo")
+             wind_speed_unit="kmh", timezone="America/Sao_Paulo")
     r = requests.get(url, params=p, timeout=60)
     r.raise_for_status()
     h = r.json()["hourly"]
@@ -101,7 +101,7 @@ def main():
     ap.add_argument("--csv", required=True)
     ap.add_argument("--lat", type=float, required=True)
     ap.add_argument("--lon", type=float, required=True)
-    ap.add_argument("--unidade", choices=KN, default="ms")
+    ap.add_argument("--unidade", choices=KMH, default="ms")
     ap.add_argument("--modelo", default="gfs_seamless", help="gfs_seamless, ecmwf_ifs025, icon_seamless")
     ap.add_argument("--ponto", default="all", help="id do ponto no app (ex.: ribeirao) ou all")
     ap.add_argument("--saida", default="calibracao.json")
@@ -130,7 +130,7 @@ def main():
     rmse = lambda p, y: float(math.sqrt(np.mean((np.asarray(p) - np.asarray(y)) ** 2)))
     e0 = rmse(te["mod"], te["obs"])
     e1 = rmse([aplicar(cal_tr, x, d) for x, d in zip(te["mod"], te["dir"])], te["obs"])
-    print(f"Teste (últimos 30%): erro bruto {e0:.2f} nós -> MOS por setor {e1:.2f} nós")
+    print(f"Teste (últimos 30%): erro bruto {e0:.2f} km/h -> MOS por setor {e1:.2f} km/h")
 
     try:  # comparação com um modelo não linear
         from sklearn.ensemble import GradientBoostingRegressor
@@ -138,7 +138,7 @@ def main():
                             np.sin(2 * np.pi * d["t"].dt.hour / 24), np.cos(2 * np.pi * d["t"].dt.hour / 24)]
         gb = GradientBoostingRegressor(n_estimators=300, max_depth=3, learning_rate=0.05, subsample=0.8)
         gb.fit(X(tr), tr["obs"])
-        print(f"Comparação GradientBoosting (vento+direção+hora): {rmse(gb.predict(X(te)), te['obs']):.2f} nós")
+        print(f"Comparação GradientBoosting (vento+direção+hora): {rmse(gb.predict(X(te)), te['obs']):.2f} km/h")
     except ImportError:
         pass
 
@@ -150,7 +150,7 @@ def main():
     for k, s in enumerate(cal["sectors"]):
         if s:
             print(f"  vento de {nomes[k]:>2}: real = {s['a']:+.1f} + {s['b']:.2f} x modelo  ({s['n']} h)")
-    out = dict(spot=a.ponto, model=a.modelo, n=int(len(df)), periodo=[ini, fim], estacao=[a.lat, a.lon],
+    out = dict(unit="kmh", spot=a.ponto, model=a.modelo, n=int(len(df)), periodo=[ini, fim], estacao=[a.lat, a.lon],
                rmse_before=round(e_all0, 2), rmse_after=round(e_all1, 2), rmse_teste=[round(e0, 2), round(e1, 2)], **cal)
     with open(a.saida, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=1)

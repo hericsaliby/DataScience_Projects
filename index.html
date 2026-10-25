@@ -104,6 +104,7 @@ select,input[type=text],input[type=number],input[type=datetime-local],textarea{b
 .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
 table.t{border-collapse:collapse;width:100%;font-size:13.5px}
 table.t td,table.t th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}
+table.t .num{white-space:nowrap}
 table.t th{font-weight:600;color:var(--ink-3);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .tw{overflow-x:auto}
 .windows{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
@@ -131,6 +132,13 @@ summary{cursor:pointer;font-weight:600}
 .leaflet-container a.leaflet-popup-close-button{color:var(--ink-3)}
 .pop h4{margin:0 0 4px;font-size:15px}
 .pop .row{margin-top:8px}
+.tidebox{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:10px;padding:12px}
+.tidenow{font-size:15px;line-height:1.5}
+.tidenow .big{font-family:var(--display);font-weight:600;font-size:24px;display:block}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.tide7{max-height:420px;overflow-y:auto}
+.tide7 .dh td{background:var(--surface-2);font-weight:600;font-size:12.5px}
+.up{color:var(--accent)} .dn{color:var(--sand)}
 footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -174,6 +182,14 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
         <div style="min-width:0"><div id="spotVerdict" style="font-weight:600"></div><div id="spotWhy" class="small" style="color:var(--ink-2)"></div></div>
       </div>
       <div class="kv" id="spotKv"></div>
+      <div class="tidebox">
+        <div class="row"><h3 class="grow">Maré</h3><span class="small muted" id="tideSrc"></span></div>
+        <div id="tideNow" class="tidenow"></div>
+        <div class="cols2">
+          <div style="min-width:0"><b class="small">Próximas 12 horas</b><div class="tw"><table class="t" id="tideNext"></table></div></div>
+          <div style="min-width:0"><b class="small">Tábua dos próximos dias</b><div class="tw tide7" id="tide7"></div></div>
+        </div>
+      </div>
       <div class="rose-wrap">
         <div id="rose" aria-label="Exposição ao vento"></div>
         <div style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px">
@@ -186,8 +202,8 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
       <div class="days" id="days" role="group" aria-label="Dia"></div>
       <div class="readout" id="readout">Arraste o dedo sobre os gráficos para ver hora a hora.</div>
       <div class="chart" id="chScore"></div>
-      <div><h3>Maré (m, nível médio)</h3><div class="chart" id="chTide"></div></div>
-      <div><h3>Vento (nós)</h3>
+      <div><h3>Maré (m, nível médio)</h3><div class="legend"><span><i style="background:var(--accent)"></i>Previsão</span><span><i style="background:var(--sand);height:6px;width:6px;border-radius:3px"></i>Medido no marégrafo EPAGRI (quando importado)</span></div><div class="chart" id="chTide"></div></div>
+      <div><h3>Vento (km/h)</h3>
         <div class="legend"><span><i style="background:var(--accent)"></i>Sentido no ponto (com abrigo)</span><span><i style="background:var(--ink-3)"></i>Vento aberto, modelo escolhido</span><span><i style="background:var(--s1);height:8px"></i>Faixa entre modelos</span></div>
         <div class="chart" id="chWind"></div></div>
       <div><h3>Ondas no ponto (m)</h3><div class="chart" id="chWave"></div></div>
@@ -233,6 +249,12 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
           </div>
           <div id="epMsg" class="small" style="margin-top:6px"></div>
           <label class="row small" for="useCal" style="margin-top:6px"><input type="checkbox" id="useCal" checked> Usar calibração EPAGRI quando houver</label>
+        </div>
+        <div><b>Marégrafo EPAGRI (nível medido)</b>
+          <p class="small muted">No CIRAM, abra <a href="https://ciram.epagri.sc.gov.br/index.php/maregrafos/" target="_blank" rel="noopener">Marégrafos</a> &gt; Florianópolis e copie as últimas horas de medição: data, hora, nível observado e, se aparecerem, maré astronômica e resíduo (de 24 h a 7 dias). Cole aqui ou importe o CSV. O app compara com a previsão, acerta o horário e a altura da maré e soma a maré meteorológica (o quanto vento e pressão estão empurrando a água) nas próximas horas.</p>
+          <textarea id="gaugeTxt" rows="5" style="width:100%" placeholder="data hora observado astronômica resíduo&#10;25/10/2026 21:00 0,82 0,61 0,21&#10;25/10/2026 21:15 0,85 0,63 0,22"></textarea>
+          <div class="row" style="margin-top:6px"><button class="btn ghost" id="gaugeApply" type="button">Usar medições</button><label class="btn ghost" for="gaugeFile">CSV do marégrafo<input type="file" id="gaugeFile" accept=".csv,.txt,text/csv" hidden></label><button class="btn ghost" id="gaugeClear" type="button">Remover</button></div>
+          <div id="gaugeMsg" class="small" style="margin-top:6px"></div>
         </div>
         <div><b>Tábua de maré oficial</b>
           <p class="small muted">A maré padrão vem do modelo global da Open-Meteo, que é aproximado dentro das baías. Cole a tábua da Marinha (Porto de Florianópolis) com uma linha por preamar/baixamar: <code>2026-10-25 04:12; 0.9</code>. O app desenha a curva entre os extremos e aplica o atraso de cada ponto.</p>
@@ -376,12 +398,12 @@ function astroEvents(t0,t1){
 
 /* ================== ESTADO ================== */
 const S={data:null,demo:false,model:store("pf_model")||"gfs_seamless",spot:store("pf_spot")||"ribeirao",when:0,day:null,
- log:store("pf_log")||[],calib:store("pf_calib")||{},tideTable:store("pf_tide")||null,useCal:store("pf_usecal")!==false,events:[],ml:null,derived:{}};
+ log:store("pf_log")||[],calib:store("pf_calib_kmh")||{},tideTable:store("pf_tide")||null,gauge:store("pf_gauge")||null,useCal:store("pf_usecal")!==false,events:[],ml:null,derived:{}};
 
 /* ================== BUSCA DE DADOS ================== */
 async function fetchJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status+" "+(await r.text()).slice(0,140));return r.json()}
 function apiURLs(lats,lons,mlats,mlons){const common="&timeformat=unixtime&timezone=America%2FSao_Paulo&past_days=7&forecast_days=7";
- return[`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,temperature_2m&models=${MODELS.map(m=>m.k).join(",")}&wind_speed_unit=kn${common}`,
+ return[`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,temperature_2m&models=${MODELS.map(m=>m.k).join(",")}&wind_speed_unit=kmh${common}`,
   `https://marine-api.open-meteo.com/v1/marine?latitude=${mlats}&longitude=${mlons}&hourly=wave_height,wave_direction,wave_period,sea_level_height_msl,sea_surface_temperature&cell_selection=sea${common}`]}
 async function load(){
  setStatus("Buscando previsão…");
@@ -392,10 +414,10 @@ async function load(){
   const [fr,mr]=await Promise.all([fetchJSON(fu),fetchJSON(mu).catch(err=>{console.warn("marine",err);return null})]);
   S.data=parseData(Array.isArray(fr)?fr:[fr],mr?(Array.isArray(mr)?mr:[mr]):null);S.demo=false;
   if(!mr)showBanner("Ondas e maré do modelo marinho não responderam. Cole uma tábua de maré na seção Dados para ver a maré.",true);
-  store("pf_cache",{at:Date.now(),n:SPOTS.length,fr,mr});
+  store("pf_cache2",{at:Date.now(),n:SPOTS.length,fr,mr});
  }catch(err){
   console.warn(err);
-  const c=store("pf_cache");
+  const c=store("pf_cache2");
   if(c&&c.n===SPOTS.length&&Date.now()-c.at<36*HOUR){S.data=parseData(Array.isArray(c.fr)?c.fr:[c.fr],c.mr?(Array.isArray(c.mr)?c.mr:[c.mr]):null);
    showBanner("Sem conexão. Mostrando a última previsão salva ("+fmtDH.format(c.at)+").",true)}
   else{S.data=demoData();S.demo=true;showBanner("Sem conexão com a Open-Meteo. Mostrando DADOS DE EXEMPLO, que não são previsão real. Abra o app com internet para ver a previsão.",true)}
@@ -446,12 +468,49 @@ function interpAt(t,arr,x){ // valor de arr no instante x (ms)
 function tableSeries(t,lagMin){ // curva cosseno entre extremos da tábua
  const ex=S.tideTable;if(!ex||ex.length<2)return null;
  return t.map(x=>{const y=x-lagMin*60e3;let k=ex.findIndex(e=>e.t>y);if(k<=0)return null;const a=ex[k-1],b=ex[k];const f=(y-a.t)/(b.t-a.t);return a.h+(b.h-a.h)*(1-Math.cos(Math.PI*f))/2})}
-function tideFor(sp){
+function tableAt(y){const ex=S.tideTable;if(!ex||ex.length<2)return null;let k=ex.findIndex(e=>e.t>y);if(k<=0)return null;const a=ex[k-1],b=ex[k];const f=(y-a.t)/(b.t-a.t);return a.h+(b.h-a.h)*(1-Math.cos(Math.PI*f))/2}
+function baseTide(sp){ // função x(ms) -> nível previsto (m, nível médio) antes da correção do marégrafo
  const t=S.data.t,o=S.data.spots[sp.id];
- let raw;
- if(S.tideTable){const tb=tableSeries(t,Math.max(0,sp.lag-45));if(tb){raw=tb.map(v=>v==null?null:v*(sp.t==="lagoa"?sp.amp:1));return{h:raw,src:"tábua"}}}
- raw=t.map(x=>{const v=interpAt(t,o.sea,x-sp.lag*60e3);return v==null?null:v*sp.amp});
- return{h:raw,src:"modelo"}}
+ if(S.tideTable&&S.tideTable.length>1){const lag=Math.max(0,sp.lag-45)*60e3,f=sp.t==="lagoa"?sp.amp:1;return{src:"tábua",fn:x=>{const v=tableAt(x-lag);return v==null?null:v*f}}}
+ if(!o.sea||!o.sea.some(v=>v!=null))return null;
+ return{src:"modelo",fn:x=>{const v=interpAt(t,o.sea,x-sp.lag*60e3);return v==null?null:v*sp.amp}}}
+function tideFor(sp){
+ const t=S.data.t,B=baseTide(sp);if(!B)return{h:t.map(()=>null),src:"sem dado"};
+ const G=S.gfit;
+ if(!G)return{h:t.map(B.fn),src:B.src};
+ const k=sp.t==="lagoa"?.3:1;
+ return{h:t.map(x=>{const v=B.fn(x-G.L*60e3);return v==null?null:G.b*v+k*surgeAt(x)}),src:B.src+" + marégrafo EPAGRI"}}
+/* Marégrafo: ajusta atraso (L), fator de altura (b) e referência (a) da previsão contra o medido.
+   O que sobra (resíduo) é a maré meteorológica; no futuro ela decai em ~12 h. */
+function fitGauge(){S.gfit=null;S.gObs=null;const G=S.gauge;if(!G||!G.pts||G.pts.length<8||!S.data)return;
+ const ref=SPOTS.find(s=>s.id==="pontes"),B=baseTide(ref);if(!B)return;
+ let best=null;
+ for(let L=-180;L<=180;L+=10){const xs=[],ys=[];for(const p of G.pts){const v=B.fn(p.t-L*60e3);if(v!=null){xs.push(v);ys.push(p.r!=null?p.h-p.r:p.h)}}
+  if(xs.length<8)continue;const f=fitLin(xs,ys);if(!f)continue;const b=clamp(f.b,.5,1.8);let e=0;xs.forEach((x,i)=>e+=(f.a+b*x-ys[i])**2);const rmse=Math.sqrt(e/xs.length);
+  if(!best||rmse<best.rmse)best={L,a:f.a,b,rmse,n:xs.length}}
+ if(!best)return;
+ const hasR=G.pts.some(p=>p.r!=null);best.hasR=hasR;
+ const res=G.pts.map(p=>{if(p.r!=null)return{t:p.t,r:p.r};const v=B.fn(p.t-best.L*60e3);return v==null?null:{t:p.t,r:p.h-(best.a+best.b*v)}}).filter(Boolean).sort((a,b)=>a.t-b.t);
+ const last=res[res.length-1],tail=res.filter(x=>x.t>last.t-HOUR);best.surge=tail.reduce((s,x)=>s+x.r,0)/tail.length;best.tLast=last.t;best.res=res;
+ const raw=G.pts.map(p=>{const v=B.fn(p.t-best.L*60e3);return v==null?null:best.b*v}).filter(v=>v!=null);
+ best.rmseRaw=Math.sqrt(G.pts.reduce((s,p)=>{const v=B.fn(p.t);return v==null?s:s+((p.r!=null?p.h-p.r:p.h)-best.a-v)**2},0)/G.pts.length);
+ S.gfit=best;const m=new Map();for(const p of G.pts){const k=Math.round(p.t/HOUR)*HOUR;const e=m.get(k)||[0,0];e[0]+=p.h-best.a;e[1]++;m.set(k,e)}
+ S.gObs=new Map([...m].map(([k,[s,n]])=>[k,s/n]))}
+function surgeAt(x){const G=S.gfit;if(!G)return 0;const R=G.res;if(x>=G.tLast)return G.surge*Math.exp(-(x-G.tLast)/(12*HOUR));if(x<R[0].t)return 0;
+ let k=R.findIndex(p=>p.t>=x);if(k<=0)return R[0].r;const a=R[k-1],b=R[k];if(b.t-a.t>3*HOUR)return 0;return a.r+(b.r-a.r)*(x-a.t)/(b.t-a.t)}
+function parseGauge(txt){const pts=[];
+ for(const l of txt.split(/\r?\n/)){let m=l.match(/(\d{2})\/(\d{2})\/(\d{4})[\sT,;]+(\d{1,2}):(\d{2})(?::\d{2})?/),t;
+  if(m)t=Date.UTC(+m[3],m[2]-1,+m[1],+m[4]+3,+m[5]);
+  else{m=l.match(/(\d{4})-(\d{2})-(\d{2})[\sT,;]+(\d{1,2}):(\d{2})(?::\d{2})?/);if(m)t=Date.UTC(+m[1],m[2]-1,+m[3],+m[4]+3,+m[5])}
+  if(!m)continue;
+  // colunas depois da hora: observado [, astronômica [, resíduo]]
+  const nums=(l.slice(m.index+m[0].length).match(/-?\d+(?:[.,]\d+)?/g)||[]).map(v=>parseFloat(v.replace(",",".")));
+  if(!nums.length||isNaN(nums[0]))continue;const p={t,h:nums[0]};
+  if(nums.length>=3)p.r=nums[2];else if(nums.length===2)p.r=nums[0]-nums[1];
+  pts.push(p)}
+ if(!pts.length)return pts;
+ const med=pts.map(p=>Math.abs(p.h)).sort((a,b)=>a-b)[Math.floor(pts.length/2)];if(med>5)pts.forEach(p=>{p.h/=100;if(p.r!=null)p.r/=100}); // veio em cm
+ pts.sort((a,b)=>a.t-b.t);return pts}
 
 /* ================== CALIBRAÇÃO (MOS simples) ================== */
 function calibFor(spId,m){if(!S.useCal)return null;const c=S.calib[spId]||S.calib.all;return c&&c[m]?c[m]:null}
@@ -470,7 +529,7 @@ function seaScore(type,w){if(w==null)return .6;
  if(type==="costao")return w<.3?.75:w<=1.3?1:w>=2.3?0:1-(w-1.3)/1;
  if(type==="praia")return w<.2?.55:w<.5?.8:w<=1.4?1:w>=2.6?0:1-(w-1.4)/1.2;
  return w<=.3?1:w>=1?0:1-(w-.3)/.7}
-function windScore(eff){return eff<=6?1:eff>=22?0:1-(eff-6)/16}
+function windScore(eff){return eff<=11?1:eff>=40?0:1-(eff-11)/29} // km/h
 function presScore(dp){if(dp==null)return .7;if(dp<-3)return .4;if(dp<-.5)return 1;if(dp<=.8)return .8;if(dp<=2)return .65;return .5}
 function solScore(ms){let best=.35,why=null;
  for(const ev of S.events){const dm=Math.abs(ev.t-ms)/60e3;if(dm>120)continue;
@@ -482,7 +541,7 @@ function solScore(ms){let best=.35,why=null;
  return{v:best,why}}
 
 function rebuild(){ // recalcula tudo do modelo atual
- S.derived={};for(const sp of SPOTS)computeSpot(sp);
+ fitGauge();S.derived={};for(const sp of SPOTS)computeSpot(sp);
  trainML();applyML()}
 function computeSpot(sp){const t=S.data.t,n=t.length;
  {const o=S.data.spots[sp.id],tide=tideFor(sp),cal=calibFor(sp.id,S.model);
@@ -495,7 +554,7 @@ function computeSpot(sp){const t=S.data.t,n=t.length;
    const w=corrWind(cal,raw,d);const gc=g!=null&&raw>0?g*(w/raw):(w!=null?w*1.4:null);
    const exp=d!=null?sect(sp.wx,d):.5,eff=w!=null?w*(.3+.7*exp):null;
    let wave=null;if(o.hs[i]!=null&&o.wdir[i]!=null)wave=o.hs[i]*sect(sp.sx,o.wdir[i]);
-   if(eff!=null&&(sp.t==="baia"||sp.t==="lagoa"||sp.t==="canal"))wave=Math.max(wave||0,.022*eff*exp);
+   if(eff!=null&&(sp.t==="baia"||sp.t==="lagoa"||sp.t==="canal"))wave=Math.max(wave||0,.012*eff*exp);
    // maré normalizada numa janela de ±12h
    let lo=1e9,hi=-1e9,rmax=0;for(let k=Math.max(0,i-12);k<=Math.min(n-1,i+12);k++){const v=tide.h[k];if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v)}if(rate[k]!=null)rmax=Math.max(rmax,Math.abs(rate[k]))}
    const lvl=tide.h[i]!=null&&hi>lo?(tide.h[i]-lo)/(hi-lo):null,mov=rate[i]!=null&&rmax>0?Math.abs(rate[i])/rmax:null,rising=rate[i]!=null?rate[i]>0:null;
@@ -510,13 +569,13 @@ function computeSpot(sp){const t=S.data.t,n=t.length;
    const c={vento:eff!=null?windScore(eff):.5,mar:seaScore(sp.t,wave),mare:clamp(mare,0,1),sol:sol.v,pres:presScore(dp),chuva:o.rain[i]==null?.8:o.rain[i]>5?.3:o.rain[i]>1.5?.65:1};
    let sc=0;for(const k in W)sc+=W[k]*c[k];sc*=10;
    const bonus=[];const mon=+fmtKey.format(t[i]).slice(5,7);
-   if([5,6,7].includes(mon)&&d!=null&&d>=150&&d<=250&&w>8&&(sp.t==="praia"||sp.t==="canal")){sc+=1;bonus.push("vento sul na safra da tainha")}
+   if([5,6,7].includes(mon)&&d!=null&&d>=150&&d<=250&&w>15&&(sp.t==="praia"||sp.t==="canal")){sc+=1;bonus.push("vento sul na safra da tainha")}
    let danger=null;
    if(sp.t==="costao"&&wave!=null&&wave>2.2)danger="mar grosso no costão";
-   if(gc!=null&&gc>32)danger=(danger?danger+" e ":"")+"rajadas fortes";
+   if(gc!=null&&gc>60)danger=(danger?danger+" e ":"")+"rajadas fortes";
    if(danger)sc=Math.min(sc,2);
-   rows.push({i,t:t[i],raw:w,rawModel:raw,all,d,g:gc,exp,eff,wave,hs:o.hs[i],wdir:o.wdir[i],tide:tide.h[i],rate:rate[i],lvl,mov,rising,dp,sol,rf,c,score:clamp(sc,0,10),bonus,danger,sst:o.sst[i],rain:o.rain[i],pres:o.pres[i]})}
-  S.derived[sp.id]={rows,tideSrc:tide.src}}}
+   rows.push({i,t:t[i],raw:w,rawModel:raw,all,d,g:gc,exp,eff,wave,hs:o.hs[i],wdir:o.wdir[i],tide:tide.h[i],obs:S.gObs&&(sp.t==="baia"||sp.t==="canal")?S.gObs.get(t[i])??null:null,rate:rate[i],lvl,mov,rising,dp,sol,rf,c,score:clamp(sc,0,10),bonus,danger,sst:o.sst[i],rain:o.rain[i],pres:o.pres[i]})}
+  S.derived[sp.id]={rows,tideSrc:tide.src,ex:tideExtremes(rows)}}}
 
 /* ================== APRENDIZADO PESSOAL (regressão logística) ================== */
 const FEATS=[["vento","Vento no ponto (fraco)"],["mar","Mar adequado"],["mare","Movimento de maré"],["enchendo","Maré enchendo"],["nivel","Maré alta"],["sol","Sol/lua (períodos)"],["pres","Pressão favorável"],["sizigia","Maré de sizígia"],["noite","Noite"],["agua","Água quente"]];
@@ -542,7 +601,7 @@ function pillStyle(sc){const k=Math.round(clamp(sc,0,10)/2);const bg=`var(--s${c
 function reasons(r,sp){const out=[];
  if(r.danger)out.push("⚠ "+r.danger);
  if(r.d!=null){const nm="vento "+dir8(r.d);
-  if(r.exp<.3)out.push(`abrigado do ${nm}`);else if(r.exp>.75&&r.raw>8)out.push(`exposto ao ${nm}`);else out.push(`${nm} ${Math.round(r.raw)} nós`)}
+  if(r.exp<.3)out.push(`abrigado do ${nm}`);else if(r.exp>.75&&r.raw>15)out.push(`exposto ao ${nm}`);else out.push(`${nm} ${Math.round(r.raw)} km/h`)}
  if(r.mov!=null){if(r.mov<.2)out.push("estofo de maré");else out.push(`maré ${r.rising?"enchendo":"vazando"}${r.mov>.7?" forte":""}`)}
  if(r.wave!=null&&(sp.t==="costao"||sp.t==="praia"))out.push(`mar ${r.wave.toFixed(1)} m`);
  if(r.sol.why&&r.sol.v>.7)out.push(r.sol.why);
@@ -564,7 +623,7 @@ function renderRank(){
  $("#rank").innerHTML=list.map(({sp,r})=>{const[v]=verdict(r.score);return`<li><button class="spot" data-spot="${sp.id}" aria-current="${sp.id===S.spot}">
   <span class="pill" style="${pillStyle(r.score)}">${r.score.toFixed(1)}</span>
   <span style="min-width:0"><span class="nm">${esc(sp.n)}</span><br><span class="why">${esc(v)} · ${esc(reasons(r,sp).slice(0,3).join(" · "))}</span></span>
-  <span class="wind-mini">${arrow(r.d)}<span class="num">${r.eff!=null?Math.round(r.eff):"–"} nós</span></span></button></li>`}).join("")}
+  <span class="wind-mini">${arrow(r.d)}<span class="num">${r.eff!=null?Math.round(r.eff):"–"} km/h</span></span></button></li>`}).join("")}
 function renderSpot(){
  const sp=spot(),D=S.derived[sp.id],r=D.rows[S.when];
  $("#spotName").textContent=sp.n;$("#spotType").textContent=TYPE_LBL[sp.t]+" · "+sp.r;
@@ -572,11 +631,11 @@ function renderSpot(){
  const[v,cls]=verdict(r.score);$("#spotVerdict").innerHTML=`<span class="tag ${r.danger?"bad":cls}">${r.danger?"Perigoso":v}</span> <span class="small muted">${fmtDH.format(r.t)}</span>`;
  $("#spotWhy").textContent=reasons(r,sp).join(" · ")+(r.p!=null?` · seu histórico: ${Math.round(r.p*100)}% de chance de saída boa`:"");
  const il=moonIllum(r.t);
- const nextEx=tideExtremes(D.rows).find(x=>x.t>r.t);
+ const nextEx=D.ex.find(x=>x.t>r.t);
  $("#spotKv").innerHTML=[
-  [r.raw!=null?`${Math.round(r.raw)} → ${Math.round(r.eff)} nós`:"–","Vento aberto → no ponto"],
+  [r.raw!=null?`${Math.round(r.raw)} → ${Math.round(r.eff)} km/h`:"–","Vento aberto → no ponto"],
   [r.d!=null?`${dir16(r.d)} ${Math.round(r.d)}°`:"–","Direção do vento"],
-  [r.g!=null?`${Math.round(r.g)} nós`:"–","Rajadas"],
+  [r.g!=null?`${Math.round(r.g)} km/h`:"–","Rajadas"],
   [r.wave!=null?`${r.wave.toFixed(1)} m`:"–",`Onda no ponto${r.hs!=null?` (fora: ${r.hs.toFixed(1)} m ${dir16(r.wdir)})`:""}`],
   [r.tide!=null?`${r.tide>=0?"+":""}${r.tide.toFixed(2)} m ${r.rate!=null?(r.rate>0?"↑":"↓"):""}`:"–",`Maré (${D.tideSrc})`],
   [nextEx?`${nextEx.hi?"Preamar":"Baixamar"} ${fmtH.format(nextEx.t)}`:"–","Próximo extremo"],
@@ -588,8 +647,8 @@ function renderSpot(){
  $("#spotNotes").innerHTML=esc(sp.notes)+(sp.custom?`<br><span class="row" style="margin-top:6px">${sp.temp?`<input type="text" id="pinName2" placeholder="Nome do ponto" style="flex:1;min-width:140px"><button class="btn" type="button" data-pinsave="2">Salvar ponto</button>`:`<button class="btn ghost" type="button" data-deldspot="${sp.id}">Remover este ponto</button>`}<label class="inline" for="pinType" style="flex-direction:row;align-items:center;gap:6px">Tipo <select id="pinType">${Object.entries(TYPE_LBL).map(([k,v])=>`<option value="${k}"${k===sp.t?" selected":""}>${v}</option>`).join("")}</select></label></span>`:"");
  $("#windyLink").href=`https://www.windy.com/${sp.lat}/${sp.lon}?gfs,${sp.lat},${sp.lon},12`;
  $("#rose").innerHTML=roseSVG(sp,r.d);
- renderDays();renderCharts();renderWindows()}
-function modelSpread(r){if(r.all.length<2)return"–";const mx=Math.max(...r.all),mn=Math.min(...r.all);const s=mx-mn;return s<4?"Alta":s<8?"Média":"Baixa ("+Math.round(mn)+"–"+Math.round(mx)+" nós)"}
+ renderTide(sp,D,r);renderDays();renderCharts();renderWindows()}
+function modelSpread(r){if(r.all.length<2)return"–";const mx=Math.max(...r.all),mn=Math.min(...r.all);const s=mx-mn;return s<7?"Alta":s<15?"Média":"Baixa ("+Math.round(mn)+"–"+Math.round(mx)+" km/h)"}
 function roseSVG(sp,d){const R=56,cx=70,cy=70;let p="";
  for(let k=0;k<8;k++){const a0=(k*45-22.5-90)*rad,a1=(k*45+22.5-90)*rad,v=sp.wx[k];
   p+=`<path d="M${cx} ${cy} L${cx+R*Math.cos(a0)} ${cy+R*Math.sin(a0)} A${R} ${R} 0 0 1 ${cx+R*Math.cos(a1)} ${cy+R*Math.sin(a1)} Z" fill="var(--accent)" fill-opacity="${.08+.8*v}" stroke="var(--surface)" stroke-width="2"/>`}
@@ -619,15 +678,15 @@ function renderCharts(){
  const line=(vals,h,lo,hi,stroke,wd,dash)=>{let d="",pen=false;vals.forEach((v,i)=>{if(v==null){pen=false;return}const y=6+(h-26)*(1-(v-lo)/(hi-lo||1));d+=(pen?"L":"M")+x(i).toFixed(1)+" "+y.toFixed(1);pen=true});return`<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${wd}" ${dash?`stroke-dasharray="${dash}"`:""} stroke-linejoin="round" stroke-linecap="round"/>`};
  const yax=(h,lo,hi,vals,fmt)=>vals.map(v=>{const y=6+(h-26)*(1-(v-lo)/(hi-lo||1));return`<line x1="${padL}" x2="${W-padR}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${padL-5}" y="${y+4}" text-anchor="end">${fmt(v)}</text>`}).join("");
  // maré
- const th=rows.map(r=>r.tide),tv=th.filter(v=>v!=null);
+ const th=rows.map(r=>r.tide),ob=rows.map(r=>r.obs),tv=[...th,...ob].filter(v=>v!=null);
  if(tv.length){let lo=Math.min(...tv),hi=Math.max(...tv);lo=Math.floor((lo-.05)*10)/10;hi=Math.ceil((hi+.05)*10)/10;const h=130;
   const step=hi-lo>1?.5:.2;const yt=[];for(let v=Math.ceil(lo/step)*step;v<=hi+1e-9;v+=step)yt.push(+v.toFixed(2));
   const area=(()=>{let d="";th.forEach((v,i)=>{if(v==null)return;const y=6+(h-26)*(1-(v-lo)/(hi-lo));d+=(d?"L":"M")+x(i)+" "+y});return d?`<path d="${d}L${x(th.length-1)} ${h-20}L${x(0)} ${h-20}Z" fill="var(--accent)" fill-opacity=".14"/>`:""})();
   const ex=tideExtremes(rows).map(e=>{const fi=(e.t-rows[0].t)/HOUR;if(fi<0||fi>rows.length-1)return"";const y=6+(h-26)*(1-(e.h-lo)/(hi-lo));return`<circle cx="${x(fi)}" cy="${y}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text x="${x(fi)}" y="${e.hi?y-8:y+16}" text-anchor="middle" style="fill:var(--ink-2)">${fmtH.format(e.t)}</text>`}).join("");
-  $("#chTide").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${night(h)}${yax(h,lo,hi,yt,v=>v.toFixed(1))}${area}${line(th,h,lo,hi,"var(--accent)",2)}${ex}${xAxis(h)}${cross(h)}</svg>`}
+  $("#chTide").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${night(h)}${yax(h,lo,hi,yt,v=>v.toFixed(1))}${area}${line(th,h,lo,hi,"var(--accent)",2)}${ob.map((v,i)=>v==null?"":`<circle cx="${x(i)}" cy="${6+(h-26)*(1-(v-lo)/(hi-lo))}" r="3" fill="var(--sand)"/>`).join("")}${ex}${xAxis(h)}${cross(h)}</svg>`}
  else $("#chTide").innerHTML=`<p class="small muted">Sem dado de maré para este ponto. Cole uma tábua na seção Dados.</p>`;
  // vento
- {const h=150,vals=rows.flatMap(r=>[...r.all,r.g||0]),hi=Math.max(10,Math.ceil(Math.max(...vals)/5)*5),lo=0,yt=[];for(let v=0;v<=hi;v+=hi>25?10:5)yt.push(v);
+ {const h=150,vals=rows.flatMap(r=>[...r.all,r.g||0]),hi=Math.max(20,Math.ceil(Math.max(...vals)/10)*10),lo=0,yt=[];for(let v=0;v<=hi;v+=hi>50?20:10)yt.push(v);
   const band=(()=>{const up=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.max(...(r.all.length?r.all:[0]))/hi)]),dn=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.min(...(r.all.length?r.all:[0]))/hi)]).reverse();return`<path d="M${up.map(p=>p.join(" ")).join("L")}L${dn.map(p=>p.join(" ")).join("L")}Z" style="fill:var(--s1)" fill-opacity=".55"/>`})();
   const arrows=rows.map((r,i)=>i%2||r.d==null?"":`<g transform="translate(${x(i)} ${h-8})" style="color:var(--ink-2)">${`<g transform="rotate(${r.d+180})"><path d="M0 -6 L4 4 L0 2 L-4 4 Z" fill="currentColor"/></g>`}</g>`).join("");
   $("#chWind").innerHTML=`<svg height="${h+6}" viewBox="0 0 ${W} ${h+6}">${night(h)}${yax(h,lo,hi,yt,v=>v)}${band}${line(rows.map(r=>r.raw),h,lo,hi,"var(--ink-3)",1.5,"4 3")}${line(rows.map(r=>r.eff),h,lo,hi,"var(--accent)",2.5)}${arrows}${cross(h-6)}</svg>`}
@@ -642,10 +701,33 @@ function renderCharts(){
  const items=[...ex.map(e=>({t:e.t,a:e.hi?"Preamar":"Baixamar",b:`${e.h>=0?"+":""}${e.h.toFixed(2)} m`})),...evs.map(e=>({t:e.t,a:evName[e.k],b:e.k==="transit"||e.k==="under"?"período forte":e.k.startsWith("moon")?"período médio":""}))].sort((a,b)=>a.t-b.t);
  $("#tideTable").innerHTML=`<thead><tr><th>Hora</th><th>Evento</th><th></th></tr></thead><tbody>${items.map(o=>`<tr><td class="num">${fmtH.format(o.t)}</td><td>${o.a}</td><td class="num muted">${o.b}</td></tr>`).join("")}</tbody>`;
  updateReadout(cur>=0?cur:0)}
+const cm=v=>{const r=Math.round(v*100)/100;return`${r>=0?"+":"−"}${Math.abs(r).toFixed(2).replace(".",",")} m`};
+const dm=v=>`${Math.abs(v).toFixed(2).replace(".",",")} m`;
+const dur=ms=>{const m=Math.round(ms/60e3);return`${Math.floor(m/60)}h${String(m%60).padStart(2,"0")}`};
+function renderTide(sp,D,r){
+ $("#tideSrc").textContent="Fonte: "+D.tideSrc;
+ const ex=D.ex,next=ex.find(e=>e.t>r.t),prev=[...ex].reverse().find(e=>e.t<=r.t);
+ if(r.tide==null||!next){$("#tideNow").innerHTML=`<span class="muted">Sem previsão de maré para este ponto. Cole uma tábua na seção Dados.</span>`;$("#tideNext").innerHTML="";$("#tide7").innerHTML="";return}
+ const after=ex.find(e=>e.t>next.t),rising=next.hi,G=S.gfit;
+ let h=`<span class="big ${rising?"up":"dn"}">${rising?"▲ Enchendo":"▼ Vazando"} · ${cm(r.tide)}</span>`;
+ h+=`${rising?"Preamar":"Baixamar"} às <b>${fmtH.format(next.t)}</b> (${cm(next.h)}), daqui a ${dur(next.t-r.t)}. Ainda ${rising?"sobe":"desce"} <b>${dm(next.h-r.tide)}</b>`;
+ if(prev)h+=` (${rising?"enchente":"vazante"} total de ${dm(next.h-prev.h)}, começou às ${fmtH.format(prev.t)})`;
+ h+=`.`;if(r.rate!=null)h+=` Agora ${rising?"subindo":"descendo"} ${Math.round(Math.abs(r.rate)*100)} cm por hora.`;
+ if(after)h+=`<br>Depois ${rising?"vaza":"enche"} até <b>${fmtH.format(after.t)}</b> (${cm(after.h)}), ${rising?"descendo":"subindo"} ${dm(after.h-next.h)}.`;
+ if(G)h+=`<br><span class="small">Marégrafo EPAGRI: maré meteorológica ${cm(G.surge)} na última medição (${fmtDH.format(G.tLast)}), já somada à previsão${Math.abs(G.surge)>.15?(G.surge>0?". A água está acima do normal":". A água está abaixo do normal"):""}.</span>`;
+ $("#tideNow").innerHTML=h;
+ const rows=D.rows,i0=rows.findIndex(x=>x.t===r.t);
+ $("#tideNext").innerHTML=`<thead><tr><th>Hora</th><th>Nível</th><th>Movimento</th></tr></thead><tbody>${rows.slice(i0,i0+13).map(x=>x.tide==null?"":`<tr><td class="num">${fmtH.format(x.t)}</td><td class="num">${cm(x.tide)}</td><td class="num ${x.rate>0?"up":"dn"}">${x.rate==null?"":(x.rate>0?"▲ ":"▼ ")+Math.round(Math.abs(x.rate)*100)+" cm/h"}${x.mov!=null&&x.mov<.2?" · estofo":""}</td></tr>`).join("")}</tbody>`;
+ const today=dayKey(Date.now()),fut=ex.filter(e=>dayKey(e.t)>=today);let html=`<table class="t"><tbody>`,lastDay="";
+ fut.forEach((e,k)=>{const dk=dayKey(e.t);if(dk!==lastDay){lastDay=dk;const il=moonIllum(e.t),rf=tideRangeFactor(e.t);
+   html+=`<tr class="dh"><td colspan="3">${dk===today?"Hoje":fmtD.format(e.t)} · ${moonName(il.phase)} · ${rf>.6?"maré grande (sizígia)":rf<.35?"maré pequena (quadratura)":"maré média"}</td></tr>`}
+  const nx=fut[k+1];
+  html+=`<tr><td class="num">${fmtH.format(e.t)}</td><td><b>${e.hi?"Preamar":"Baixamar"}</b> <span class="num">${cm(e.h)}</span></td><td class="small ${e.hi?"dn":"up"}">${nx?`${e.hi?"▼ vaza":"▲ enche"} ${dm(nx.h-e.h)} até ${fmtH.format(nx.t)} (${dur(nx.t-e.t)})`:""}</td></tr>`});
+ $("#tide7").innerHTML=html+`</tbody></table>`}
 function tideExtremes(rows){const out=[];for(let k=1;k<rows.length-1;k++){const a=rows[k-1].tide,b=rows[k].tide,c=rows[k+1].tide;if(a==null||b==null||c==null)continue;
  if((b>=a&&b>c)||(b<=a&&b<c)){const den=a-2*b+c;const off=den!==0?clamp(.5*(a-c)/den,-.5,.5):0;out.push({t:rows[k].t+off*HOUR,h:b-.25*(a-c)*off,hi:b>=a})}}return out}
 function updateReadout(ci){const r=CH.rows[ci];if(!r)return;const sp=spot();
- $("#readout").innerHTML=`<b class="num">${fmtDH.format(r.t)}</b> · nota <b class="num">${r.score.toFixed(1)}</b> · vento ${r.d!=null?dir16(r.d):"–"} <span class="num">${r.raw!=null?Math.round(r.raw):"–"}</span> nós (no ponto <span class="num">${r.eff!=null?Math.round(r.eff):"–"}</span>, rajada <span class="num">${r.g!=null?Math.round(r.g):"–"}</span>) · maré <span class="num">${r.tide!=null?r.tide.toFixed(2):"–"}</span> m ${r.rate!=null?(r.rate>0?"enchendo":"vazando"):""} · onda <span class="num">${r.wave!=null?r.wave.toFixed(1):"–"}</span> m<br><span class="muted">${esc(reasons(r,sp).join(" · "))}</span>`;
+ $("#readout").innerHTML=`<b class="num">${fmtDH.format(r.t)}</b> · nota <b class="num">${r.score.toFixed(1)}</b> · vento ${r.d!=null?dir16(r.d):"–"} <span class="num">${r.raw!=null?Math.round(r.raw):"–"}</span> km/h (no ponto <span class="num">${r.eff!=null?Math.round(r.eff):"–"}</span>, rajada <span class="num">${r.g!=null?Math.round(r.g):"–"}</span>) · maré <span class="num">${r.tide!=null?r.tide.toFixed(2):"–"}</span> m ${r.rate!=null?(r.rate>0?"enchendo":"vazando"):""} · onda <span class="num">${r.wave!=null?r.wave.toFixed(1):"–"}</span> m<br><span class="muted">${esc(reasons(r,sp).join(" · "))}</span>`;
  document.querySelectorAll(".chart .xh").forEach(l=>{l.setAttribute("x1",CH.x(ci));l.setAttribute("x2",CH.x(ci))})}
 function renderWindows(){const sp=spot(),rows=S.derived[sp.id].rows,now=Date.now()-HOUR;const fut=rows.filter(r=>r.t>=now);const wins=[];let cur=null;
  for(const r of fut){if(r.score>=6.3&&!r.danger){if(!cur)cur={a:r,b:r,s:0,n:0};cur.b=r;cur.s+=r.score;cur.n++}else if(cur){wins.push(cur);cur=null}}if(cur)wins.push(cur);
@@ -703,7 +785,7 @@ function parseStationCSV(txt,unit){
  const find=re=>H.findIndex(h=>re.test(h));
  const cDate=find(/^data|date|datahora|timestamp/),cHour=find(/^hora|hour/),cVel=find(/vel.*(vento|med)|vento.*vel|wind.?speed|^vel/),cDir=find(/dir/),cRaj=find(/raj|gust/);
  if(cDate<0||cVel<0)throw new Error("não achei as colunas de data e velocidade. Cabeçalho lido: "+H.join(" | "));
- const k=unit==="ms"?1.94384:unit==="kmh"?0.539957:1;const out=[];
+ const k=unit==="ms"?3.6:unit==="kn"?1.852:1;const out=[];
  for(const l of lines.slice(hi+1)){const c=l.split(delim).map(s=>s.trim().replace(/^"|"$/g,""));let ds=c[cDate];if(cHour>=0&&c[cHour])ds+=" "+c[cHour];
   let m=ds.match(/(\d{2})\/(\d{2})\/(\d{4})\D+(\d{1,2})(?::(\d{2}))?/),t;
   if(m)t=Date.UTC(+m[3],m[2]-1,+m[1],+m[4]+3,+(m[5]||0));else{m=ds.match(/(\d{4})-(\d{2})-(\d{2})\D+(\d{1,2})(?::(\d{2}))?/);if(m)t=Date.UTC(+m[1],m[2]-1,+m[3],+m[4]+3,+(m[5]||0))}
@@ -716,16 +798,24 @@ $("#epFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f
   for(const m of MODELS){const xs=[],ys=[],ds=[];obs.forEach(ob=>{const i=idx.get(ob.t);if(i==null||o.wind[m.k][i]==null||ob.t>Date.now())return;xs.push(o.wind[m.k][i]);ys.push(ob.v);ds.push(o.dir[m.k][i])});
    const g=fitLin(xs,ys);if(!g)continue;const s=[...Array(8)].map((_,k)=>{const sx=[],sy=[];xs.forEach((x,j)=>{if(ds[j]!=null&&Math.round(((ds[j]%360)+360)%360/45)%8===k){sx.push(x);sy.push(ys[j])}});return sx.length>=12?fitLin(sx,sy):null});
    const c={g,s,n:xs.length,at:Date.now(),src:f.name};let e0=0,e1=0;xs.forEach((x,j)=>{e0+=(x-ys[j])**2;e1+=(corrWind(c,x,ds[j])-ys[j])**2});c.rmse0=Math.sqrt(e0/xs.length);c.rmse1=Math.sqrt(e1/xs.length);res[m.k]=c;
-   report.push(`${m.n}: ${xs.length} horas, erro ${c.rmse0.toFixed(1)} → ${c.rmse1.toFixed(1)} nós`)}
+   report.push(`${m.n}: ${xs.length} horas, erro ${c.rmse0.toFixed(1)} → ${c.rmse1.toFixed(1)} km/h`)}
   if(!report.length)throw new Error(`li ${obs.length} linhas, mas nenhuma coincide com as horas carregadas (últimos 7 dias). Para períodos longos use o script Python.`);
-  S.calib[target]=res;store("pf_calib",S.calib);rebuild();renderAll();msg.innerHTML="Calibração salva para <b>"+esc(target==="all"?"todos os pontos":sp.n)+"</b>. "+report.join(" · ")}
+  S.calib[target]=res;store("pf_calib_kmh",S.calib);rebuild();renderAll();msg.innerHTML="Calibração salva para <b>"+esc(target==="all"?"todos os pontos":sp.n)+"</b>. "+report.join(" · ")}
  catch(err){msg.textContent="Não deu para usar o arquivo: "+err.message}});
-$("#calFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());const target=j.spot||$("#epSpot").value;S.calib[target]=Object.assign(S.calib[target]||{},{[j.model||"gfs_seamless"]:{g:j.global,s:j.sectors,n:j.n,rmse0:j.rmse_before,rmse1:j.rmse_after,at:Date.now(),src:f.name}});store("pf_calib",S.calib);rebuild();renderAll();$("#epMsg").textContent=`Calibração ${j.model||"gfs_seamless"} importada para ${target}. Erro ${(+j.rmse_before).toFixed(1)} → ${(+j.rmse_after).toFixed(1)} nós.`}catch(err){$("#epMsg").textContent="JSON inválido: "+err.message}});
+$("#calFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(j.unit!=="kmh"){const cv=x=>x&&{...x,a:x.a*1.852};j.global=cv(j.global);j.sectors=(j.sectors||[]).map(cv);j.rmse_before*=1.852;j.rmse_after*=1.852}const target=j.spot||$("#epSpot").value;S.calib[target]=Object.assign(S.calib[target]||{},{[j.model||"gfs_seamless"]:{g:j.global,s:j.sectors,n:j.n,rmse0:j.rmse_before,rmse1:j.rmse_after,at:Date.now(),src:f.name}});store("pf_calib_kmh",S.calib);rebuild();renderAll();$("#epMsg").textContent=`Calibração ${j.model||"gfs_seamless"} importada para ${target}. Erro ${(+j.rmse_before).toFixed(1)} → ${(+j.rmse_after).toFixed(1)} km/h.`}catch(err){$("#epMsg").textContent="JSON inválido: "+err.message}});
 /* ---- tábua ---- */
 $("#tideApply").addEventListener("click",()=>{const ex=[];$("#tideTxt").value.split(/\n/).forEach(l=>{const m=l.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})\s*[;,\t ]\s*(-?\d+(?:[.,]\d+)?)/)||l.match(/(\d{2})\/(\d{2})\/(\d{4})[ T](\d{1,2}):(\d{2})\s*[;,\t ]\s*(-?\d+(?:[.,]\d+)?)/);if(!m)return;
   const iso=m[0].includes("/")?[m[3],m[2],m[1]]:[m[1],m[2],m[3]];ex.push({t:Date.UTC(+iso[0],iso[1]-1,+iso[2],+m[4]+3,+m[5]),h:parseFloat(m[6].replace(",","."))})});
  ex.sort((a,b)=>a.t-b.t);if(ex.length<2){$("#tideMsg").textContent="Preciso de pelo menos 2 linhas no formato 2026-10-25 04:12; 0.9";return}
  const mean=ex.reduce((s,x)=>s+x.h,0)/ex.length;S.tideTable=ex.map(x=>({t:x.t,h:x.h-mean}));store("pf_tide",S.tideTable);rebuild();renderAll();$("#tideMsg").textContent=`${ex.length} extremos carregados (alturas centradas no nível médio).`});
+function applyGauge(txt){const pts=parseGauge(txt);const msg=$("#gaugeMsg");
+ if(pts.length<8){msg.textContent=`Li ${pts.length} medições. Preciso de pelo menos 8 linhas com data, hora e nível, por exemplo: 25/10/2026 21:00 0,82`;return}
+ const old=(S.gauge&&S.gauge.pts)||[],m=new Map([...old,...pts].map(p=>[p.t,p]));const all=[...m.values()].filter(p=>p.t>Date.now()-10*24*HOUR).sort((a,b)=>a.t-b.t);
+ S.gauge={pts:all,at:Date.now()};store("pf_gauge",S.gauge);rebuild();renderAll();const G=S.gfit;
+ msg.innerHTML=G?`${all.length} medições de ${fmtDH.format(all[0].t)} a ${fmtDH.format(all[all.length-1].t)}. Ajuste: horário ${G.L>0?"+":""}${G.L} min, altura ×${G.b.toFixed(2)}, erro ${Math.round(G.rmseRaw*100)} → ${Math.round(G.rmse*100)} cm. Maré meteorológica agora: <b>${cm(G.surge)}</b>${G.hasR?" (resíduo informado pela EPAGRI)":" (estimada; cole também as colunas de maré astronômica e resíduo para ficar exata)"}.`:`${all.length} medições salvas, mas elas não coincidem com o período da previsão carregada (últimos 7 dias).`}
+$("#gaugeApply").addEventListener("click",()=>applyGauge($("#gaugeTxt").value));
+$("#gaugeFile").addEventListener("change",async e=>{const f=e.target.files[0];if(f)applyGauge(await f.text())});
+$("#gaugeClear").addEventListener("click",()=>{S.gauge=null;store("pf_gauge",null);rebuild();renderAll();$("#gaugeMsg").textContent="Medições removidas."});
 $("#tideClear").addEventListener("click",()=>{S.tideTable=null;store("pf_tide",null);rebuild();renderAll();$("#tideMsg").textContent="Usando o modelo."});
 
 document.addEventListener("change",e=>{if(e.target.id!=="pinType")return;const sp=spot();if(!sp.custom)return;sp.t=e.target.value;if(!sp.temp)saveCustom();computeSpot(sp);applyML();renderAll()});
@@ -753,7 +843,7 @@ function selectSpot(id,scroll=true){S.spot=id;store("pf_spot",S.spot);S.day=dayK
 function popupHTML(sp){const r=S.derived[sp.id].rows[S.when];const[v,cls]=verdict(r.score);
  return`<div class="pop"><h4>${esc(sp.n)}</h4><div><span class="tag ${r.danger?"bad":cls}">${r.danger?"Perigoso":v}</span> <b class="num">${r.score.toFixed(1)}</b>/10 · ${fmtDH.format(r.t)}</div>
  <div class="small">${esc(reasons(r,sp).join(" · "))}</div>
- <div class="small num" style="margin-top:4px">Vento ${r.d!=null?dir16(r.d):"–"} ${r.raw!=null?Math.round(r.raw):"–"} → ${r.eff!=null?Math.round(r.eff):"–"} nós no ponto · onda ${r.wave!=null?r.wave.toFixed(1)+" m":"–"} · maré ${r.tide!=null?r.tide.toFixed(2)+" m"+(r.rate!=null?(r.rate>0?" ↑":" ↓"):""):"–"}</div>
+ <div class="small num" style="margin-top:4px">Vento ${r.d!=null?dir16(r.d):"–"} ${r.raw!=null?Math.round(r.raw):"–"} → ${r.eff!=null?Math.round(r.eff):"–"} km/h no ponto · onda ${r.wave!=null?r.wave.toFixed(1)+" m":"–"} · maré ${r.tide!=null?r.tide.toFixed(2)+" m"+(r.rate!=null?(r.rate>0?" ↑":" ↓"):""):"–"}</div>
  ${sp.temp?`<div class="small muted" style="margin-top:4px">${esc(sp.notes)}</div><div class="row"><input type="text" id="pinName" placeholder="Nome do ponto" style="flex:1;min-width:0"><button class="btn" type="button" data-pinsave="1">Salvar</button></div>`:""}
  <div class="row"><button class="btn ghost" type="button" data-spot="${sp.id}">Ver detalhes e gráficos</button></div></div>`}
 function openPopup(sp){const m=MK[sp.id];if(!m)return;m.unbindPopup();m.bindPopup(popupHTML(sp),{maxWidth:300,autoPanPadding:[20,20]}).openPopup()}

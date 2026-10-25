@@ -19,8 +19,10 @@ Previsão de pesca para a Grande Florianópolis: junta vento (GFS, ECMWF ou ICON
 | **Onde ir** | Ranking dos 18 pontos para o horário escolhido, com o motivo de cada nota (abrigado/exposto, maré, mar, lua). |
 | **Abrigo** | Cada ponto tem uma rosa de exposição em 8 setores para vento e outra para ondulação. O vento "no ponto" é o vento aberto reduzido pelo abrigo. |
 | **Modelos** | GFS, ECMWF IFS 0.25 e ICON. A faixa no gráfico mostra o quanto os modelos discordam: faixa larga significa previsão incerta. |
+| **Painel de maré** | Para o ponto escolhido: se está enchendo ou vazando, a que horas é a próxima preamar ou baixamar, quanto ainda sobe ou desce, a velocidade em cm/h, as próximas 12 horas hora a hora e a tábua dos próximos dias ("enche 0,62 m até 09:40, 6h28"), com fase da lua e indicação de maré grande ou pequena. |
+| **Marégrafo EPAGRI** | Cole ou importe as medições do marégrafo de Florianópolis no CIRAM (data, hora, observado e, se houver, astronômica e resíduo). O app ajusta horário e altura da previsão ao medido e soma a maré meteorológica atual, que vai diminuindo ao longo de ~12 h. Os pontos medidos aparecem no gráfico de maré. |
 | **Maré** | Nível do mar do modelo marinho da Open-Meteo, com atraso e amplitude ajustados por ponto (a Lagoa, por exemplo, tem maré fraca e atrasada ~3 h). Dá para colar a tábua da Marinha para mais precisão. |
-| **Nota 0–10** | Soma ponderada de vento no ponto, mar, movimento de maré, períodos de sol e lua (solunar), tendência de pressão e chuva. Os pesos mudam por tipo de ponto: em baía e canal a maré pesa mais, em costão o mar pesa mais. Mar grosso no costão ou rajada acima de 32 nós limita a nota a 2 e marca como Perigoso. |
+| **Nota 0–10** | Soma ponderada de vento no ponto, mar, movimento de maré, períodos de sol e lua (solunar), tendência de pressão e chuva. Os pesos mudam por tipo de ponto: em baía e canal a maré pesa mais, em costão o mar pesa mais. Mar grosso no costão ou rajada acima de 60 km/h limita a nota a 2 e marca como Perigoso. |
 | **Diário + ML** | Cada registro guarda as condições daquela hora. Com 8 ou mais registros (com saídas boas e fracas), uma regressão logística aprende o que funciona para você e entra na nota (até 50% do peso). |
 | **EPAGRI** | Importe o CSV horário de uma estação do CIRAM. O app compara com o modelo nas mesmas horas e corrige o vento por setor (MOS). |
 
@@ -39,6 +41,8 @@ python ml/analisar_diario.py diario-pesca.json
 ```
 
 O script de calibração usa a API de previsões históricas da Open-Meteo (o que o GFS previu de fato em cada hora), valida no período final dos dados para não superestimar o ganho e compara com um GradientBoosting.
+
+Todo o vento é mostrado em km/h.
 
 ## Ajustar os pontos
 
