@@ -1,0 +1,31 @@
+name: Marégrafo EPAGRI
+on:
+  push:
+    branches: [pesqueiro-floripa]
+    paths: [".github/workflows/maregrafo.yml", "tools/maregrafo.py"]
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *"
+permissions:
+  contents: write
+concurrency: maregrafo
+jobs:
+  coleta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pesqueiro-floripa
+      - name: Baixa a página dos marégrafos
+        run: |
+          mkdir -p data
+          curl -sSL -A "Mozilla/5.0 (pesqueiro-floripa)" -m 60 "https://ciram.epagri.sc.gov.br/index.php/maregrafos/" -o data/maregrafo_raw.html || true
+          ls -la data
+      - name: Extrai os dados
+        run: python3 tools/maregrafo.py data/maregrafo_raw.html data/maregrafo.json || true
+      - name: Salva no repositório
+        run: |
+          git config user.name "pesqueiro-bot"
+          git config user.email "pesqueiro-bot@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || (git commit -m "Atualiza marégrafo EPAGRI" && git pull --rebase origin pesqueiro-floripa && git push origin HEAD:pesqueiro-floripa)
