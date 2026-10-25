@@ -148,6 +148,18 @@ summary{cursor:pointer;font-weight:600}
 .phases div{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px}
 #moonDays .day svg{display:block;margin:2px auto}
 .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;line-height:1.35;box-shadow:0 2px 8px rgba(0,0,0,.18);white-space:nowrap;z-index:2;font-variant-numeric:tabular-nums}
+.windnow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:6px 0 8px}
+.windnow .wn{display:flex;flex-direction:column;justify-content:center;border-radius:8px;padding:6px 12px;color:#fff;min-width:96px}
+.windnow .wn b{font-family:var(--display);font-size:26px;font-weight:600;line-height:1}
+.windnow .wn span{font-size:12px;opacity:.92}
+.windnow .wd{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+.windnow .wd b{font-family:var(--display);font-size:22px;font-weight:600}
+table.wt{border-collapse:separate;border-spacing:2px;font-size:12px;margin-top:6px}
+table.wt th{font-weight:500;color:var(--ink-3);text-align:left;padding:2px 6px 2px 0;white-space:nowrap;position:sticky;left:0;background:var(--surface);z-index:1}
+table.wt td{min-width:32px;text-align:center;padding:3px 2px;border-radius:4px;font-variant-numeric:tabular-nums;cursor:pointer}
+table.wt td.c{color:#fff;font-weight:600}
+table.wt td.now{outline:2px solid var(--sand);outline-offset:-1px}
+table.wt td.sel{box-shadow:inset 0 0 0 2px var(--ink)}
 footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -214,8 +226,10 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
       <div class="chart" id="chScore"></div>
       <div><h3>Maré (m, nível médio)</h3><div class="legend"><span><i style="background:var(--accent)"></i>Previsão</span><span><i style="background:var(--sand);height:6px;width:6px;border-radius:3px"></i>Medido no marégrafo EPAGRI (quando importado)</span></div><div class="chart" id="chTide"></div></div>
       <div><h3>Vento (<span class="wu">km/h</span>)</h3>
-        <div class="legend"><span><i style="background:var(--accent)"></i>Sentido no ponto (com abrigo)</span><span><i style="background:var(--ink-3)"></i>Vento aberto, modelo escolhido</span><span><i style="background:var(--s1);height:8px"></i>Faixa entre modelos</span></div>
-        <div class="chart" id="chWind"></div></div>
+        <div class="windnow" id="windNow"></div>
+        <div class="legend"><span><i style="background:var(--ink-2)"></i>Vento (modelo escolhido)</span><span><i style="background:var(--bad)"></i>Rajada</span><span><i style="background:var(--accent)"></i>Vento no ponto (com abrigo)</span><span><i style="background:var(--s1);height:8px"></i>Faixa entre modelos</span></div>
+        <div class="chart" id="chWind"></div>
+        <div class="tw" id="windTab"></div></div>
       <div><h3>Ondas no ponto (m)</h3><div class="chart" id="chWave"></div></div>
       <div class="tw"><table class="t" id="tideTable"></table></div>
       <div><h3>Melhores janelas (7 dias)</h3><ul class="windows" id="windows"></ul></div>
@@ -381,6 +395,8 @@ const SPECIES=[
 const UNITS={kmh:{l:"km/h",f:1},kn:{l:"nós",f:1/1.852},ms:{l:"m/s",f:1/3.6}};
 const UF=()=>UNITS[S.unit].f,WU=()=>UNITS[S.unit].l;
 const wv=v=>v==null?"–":Math.round(v*UF());
+const WCOL=[[0,[98,113,183]],[4,[57,97,159]],[11,[74,148,169]],[18,[77,141,123]],[25,[83,165,83]],[32,[53,159,53]],[40,[167,157,81]],[47,[159,127,58]],[54,[161,108,92]],[61,[129,58,78]],[68,[175,80,136]],[76,[117,80,136]],[86,[109,97,163]]];
+function windColor(k){if(k==null)return"transparent";for(let i=1;i<WCOL.length;i++){const[a,ca]=WCOL[i-1],[b,cb]=WCOL[i];if(k<=b){const f=(k-a)/(b-a);return`rgb(${ca.map((c,j)=>Math.round(c+(cb[j]-c)*f)).join(",")})`}}return`rgb(${WCOL[WCOL.length-1][1].join(",")})`}
 const $=s=>document.querySelector(s);
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const fmtH=new Intl.DateTimeFormat("pt-BR",{timeZone:TZ,hour:"2-digit",minute:"2-digit"});
@@ -810,7 +826,19 @@ function renderCharts(){
  {const f=UF(),h=150,vals=rows.flatMap(r=>[...r.all,r.g||0]),mxD=Math.max(...vals)*f,stD=S.unit==="ms"?(mxD>12?5:2):S.unit==="kn"?(mxD>25?10:5):(mxD>50?20:10),hiD=Math.max(stD*2,Math.ceil(mxD/stD)*stD),hi=hiD/f,lo=0,yt=[];for(let v=0;v<=hiD+1e-9;v+=stD)yt.push(v/f);
   const band=(()=>{const up=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.max(...(r.all.length?r.all:[0]))/hi)]),dn=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.min(...(r.all.length?r.all:[0]))/hi)]).reverse();return`<path d="M${up.map(p=>p.join(" ")).join("L")}L${dn.map(p=>p.join(" ")).join("L")}Z" style="fill:var(--s1)" fill-opacity=".55"/>`})();
   const arrows=rows.map((r,i)=>i%2||r.d==null?"":`<g transform="translate(${x(i)} ${h-8})" style="color:var(--ink-2)">${`<g transform="rotate(${r.d+180})"><path d="M0 -6 L4 4 L0 2 L-4 4 Z" fill="currentColor"/></g>`}</g>`).join("");
-  CH.Y.wind={lo,hi,h};$("#chWind").innerHTML=`<svg height="${h+6}" viewBox="0 0 ${W} ${h+6}">${night(h)}${yax(h,lo,hi,yt,v=>Math.round(v*f))}${band}${line(rows.map(r=>r.raw),h,lo,hi,"var(--ink-3)",1.5,"4 3")}${line(rows.map(r=>r.eff),h,lo,hi,"var(--accent)",2.5)}${arrows}${cross(h-6)}<g class="hov"></g></svg><div class="tip" hidden></div>`}
+  CH.Y.wind={lo,hi,h};$("#chWind").innerHTML=`<svg height="${h+6}" viewBox="0 0 ${W} ${h+6}">${night(h)}${yax(h,lo,hi,yt,v=>Math.round(v*f))}${band}${line(rows.map(r=>r.g),h,lo,hi,"var(--bad)",1.5,"3 3")}${line(rows.map(r=>r.raw),h,lo,hi,"var(--ink-2)",2)}${line(rows.map(r=>r.eff),h,lo,hi,"var(--accent)",2.5)}${arrows}${cross(h-6)}<g class="hov"></g></svg><div class="tip" hidden></div>`}
+ renderWindNow();
+ {const nowH=Math.floor(Date.now()/HOUR)*HOUR;const cell=(r,i,html,cls="",st="")=>`<td data-ci="${i}" class="${cls}${r.t===nowH?" now":""}" style="${st}">${html}</td>`;
+  const row=(lbl,fn)=>`<tr><th>${lbl}</th>${rows.map(fn).join("")}</tr>`;
+  $("#windTab").innerHTML=`<table class="wt"><tbody>
+  ${row("Hora",(r,i)=>cell(r,i,String(localHour(r.t)).padStart(2,"0")))}
+  ${row("Direção",(r,i)=>cell(r,i,r.d!=null?`<span style="color:var(--ink-2)">${arrow(r.d,14)}</span>`:""))}
+  ${row("Vento",(r,i)=>cell(r,i,wv(r.raw),"c",`background:${windColor(r.raw)}`))}
+  ${row("Rajada",(r,i)=>cell(r,i,wv(r.g),"c",`background:${windColor(r.g)}`))}
+  ${row("No ponto",(r,i)=>cell(r,i,wv(r.eff),"c",`background:${windColor(r.eff)}`))}
+  </tbody></table>`;
+  $("#windTab").querySelectorAll("td[data-ci]").forEach(td=>td.addEventListener("click",()=>updateReadout(+td.dataset.ci)));
+  const nc=$("#windTab td.now");if(nc){const tw=$("#windTab");tw.scrollLeft=Math.max(0,nc.offsetLeft-tw.clientWidth/3)}}
  // ondas
  {const wv=rows.map(r=>r.wave),vv=wv.filter(v=>v!=null);const h=90;
   if(vv.length){const hi=Math.max(1,Math.ceil(Math.max(...vv)*2)/2),yt=[0,hi/2,hi];
@@ -849,6 +877,12 @@ function renderTide(sp,D,r){
  $("#tide7").innerHTML=html+`</tbody></table>`}
 function tideExtremes(rows){const out=[];for(let k=1;k<rows.length-1;k++){const a=rows[k-1].tide,b=rows[k].tide,c=rows[k+1].tide;if(a==null||b==null||c==null)continue;
  if((b>=a&&b>c)||(b<=a&&b<c)){const den=a-2*b+c;const off=den!==0?clamp(.5*(a-c)/den,-.5,.5):0;out.push({t:rows[k].t+off*HOUR,h:b-.25*(a-c)*off,hi:b>=a})}}return out}
+function renderWindNow(){const sp=spot(),rows=S.derived[sp.id].rows,nowH=Math.floor(Date.now()/HOUR)*HOUR;const r=rows.find(x=>x.t===nowH)||rows[S.when];if(!r)return;
+ const nm=r.d!=null?dir8(r.d):"";
+ $("#windNow").innerHTML=`<div class="wd">${r.d!=null?`<span style="color:var(--ink)">${arrow(r.d,30)}</span>`:""}<div><b>${r.d!=null?dir16(r.d):"–"}</b><div class="small muted">Agora ${fmtH.format(r.t)}${nm?" · vento "+nm:""}</div></div></div>
+ <div class="wn" style="background:${windColor(r.raw)}"><b>${wv(r.raw)}</b><span>Vento ${WU()}</span></div>
+ <div class="wn" style="background:${windColor(r.g)}"><b>${wv(r.g)}</b><span>Rajada ${WU()}</span></div>
+ <div class="wn" style="background:${windColor(r.eff)}"><b>${wv(r.eff)}</b><span>No ponto ${r.exp<.3?"(abrigado)":r.exp>.75?"(exposto)":""}</span></div>`}
 function yOf(c,v){const Y=CH.Y[c];return 6+(Y.h-26)*(1-(v-Y.lo)/((Y.hi-Y.lo)||1))}
 function updateHover(ci){const r=CH.rows[ci];if(!r||!CH.x)return;const X=CH.x(ci),hr=`<b class="num">${fmtH.format(r.t)}</b>`;
  const set=(id,c,pts,html)=>{const el=$(id);if(!el||!CH.Y[c])return;const g=el.querySelector(".hov"),tip=el.querySelector(".tip"),svg=el.querySelector("svg");if(!g||!tip||!svg)return;
@@ -860,11 +894,12 @@ function updateHover(ci){const r=CH.rows[ci];if(!r||!CH.x)return;const X=CH.x(ci
   tip.style.left=Math.max(0,left)+"px";let t=top-tip.offsetHeight-8;if(t<0)t=Math.min(top+12,svg.getBoundingClientRect().height-tip.offsetHeight);tip.style.top=t+"px"};
  set("#chTide","tide",[{v:r.tide,col:"var(--accent)"},{v:r.obs,col:"var(--sand)"}],
   `${hr} · <b>${r.tide!=null?cm(r.tide):"–"}</b>${r.rate!=null?` <span class="${r.rate>0?"up":"dn"}">${r.rate>0?"▲ enchendo":"▼ vazando"} ${Math.round(Math.abs(r.rate)*100)} cm/h</span>`:""}${r.obs!=null?`<br><span class="muted">medido: ${cm(r.obs)}</span>`:""}`);
- set("#chWind","wind",[{v:r.raw,col:"var(--ink-3)"},{v:r.eff,col:"var(--accent)"}],
+ set("#chWind","wind",[{v:r.g,col:"var(--bad)"},{v:r.raw,col:"var(--ink-2)"},{v:r.eff,col:"var(--accent)"}],
   `${hr} · ${r.d!=null?dir16(r.d)+" ":""}<b>${wv(r.raw)} ${WU()}</b><br>no ponto <b>${wv(r.eff)}</b> · rajada ${wv(r.g)}${r.all.length>1&&wv(Math.min(...r.all))!==wv(Math.max(...r.all))?`<br><span class="muted">modelos: ${wv(Math.min(...r.all))}–${wv(Math.max(...r.all))}</span>`:""}`);
  set("#chWave","wave",[{v:r.wave,col:"var(--accent)"}],
   `${hr} · onda no ponto <b>${r.wave!=null?r.wave.toFixed(1).replace(".",","):"–"} m</b>${r.hs!=null?`<br><span class="muted">mar aberto ${r.hs.toFixed(1).replace(".",",")} m ${dir16(r.wdir)}</span>`:""}`)}
 function updateReadout(ci){const r=CH.rows[ci];if(!r)return;const sp=spot();updateHover(ci);
+ document.querySelectorAll("#windTab td.sel").forEach(e=>e.classList.remove("sel"));document.querySelectorAll(`#windTab td[data-ci="${ci}"]`).forEach(e=>e.classList.add("sel"));
  $("#readout").innerHTML=`<b class="num">${fmtDH.format(r.t)}</b> · nota <b class="num">${r.score.toFixed(1)}</b> · vento ${r.d!=null?dir16(r.d):"–"} <span class="num">${r.raw!=null?wv(r.raw):"–"}</span> ${WU()} (no ponto <span class="num">${r.eff!=null?wv(r.eff):"–"}</span>, rajada <span class="num">${r.g!=null?wv(r.g):"–"}</span>) · maré <span class="num">${r.tide!=null?r.tide.toFixed(2):"–"}</span> m ${r.rate!=null?(r.rate>0?"enchendo":"vazando"):""} · onda <span class="num">${r.wave!=null?r.wave.toFixed(1):"–"}</span> m<br><span class="muted">${esc(reasons(r,sp).join(" · "))}</span>`;
  document.querySelectorAll(".chart .xh").forEach(l=>{l.setAttribute("x1",CH.x(ci));l.setAttribute("x2",CH.x(ci))})}
 function renderWindows(){const sp=spot(),rows=S.derived[sp.id].rows,now=Date.now()-HOUR;const fut=rows.filter(r=>r.t>=now);const wins=[];let cur=null;
