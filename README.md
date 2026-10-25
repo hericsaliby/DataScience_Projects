@@ -1,0 +1,58 @@
+# Pesqueiro Floripa
+
+Previsão de pesca para a Grande Florianópolis: junta vento (GFS, ECMWF ou ICON), ondas, maré, sol e lua, e aplica regras de abrigo por ponto. Exemplo: com vento sul, o Ribeirão da Ilha, Jurerê e Ingleses ficam abrigados, enquanto Pântano do Sul e Naufragados recebem o vento de frente.
+
+## Como usar
+
+É um único arquivo, `index.html`, sem servidor nem chave de API. Os dados vêm direto da Open-Meteo, que é gratuita e aceita chamadas do navegador.
+
+- **No computador:** abra o `index.html` no navegador.
+- **No celular:** hospede de graça no GitHub Pages ou no Netlify Drop (arraste a pasta) e salve na tela inicial.
+- Sem internet, o app mostra a última previsão salva (até 36 h). Se não houver nenhuma, mostra dados de exemplo com um aviso.
+
+## O que tem
+
+| Parte | Como funciona |
+|---|---|
+| **Onde ir** | Ranking dos 18 pontos para o horário escolhido, com o motivo de cada nota (abrigado/exposto, maré, mar, lua). |
+| **Abrigo** | Cada ponto tem uma rosa de exposição em 8 setores para vento e outra para ondulação. O vento "no ponto" é o vento aberto reduzido pelo abrigo. |
+| **Modelos** | GFS, ECMWF IFS 0.25 e ICON. A faixa no gráfico mostra o quanto os modelos discordam: faixa larga significa previsão incerta. |
+| **Maré** | Nível do mar do modelo marinho da Open-Meteo, com atraso e amplitude ajustados por ponto (a Lagoa, por exemplo, tem maré fraca e atrasada ~3 h). Dá para colar a tábua da Marinha para mais precisão. |
+| **Nota 0–10** | Soma ponderada de vento no ponto, mar, movimento de maré, períodos de sol e lua (solunar), tendência de pressão e chuva. Os pesos mudam por tipo de ponto: em baía e canal a maré pesa mais, em costão o mar pesa mais. Mar grosso no costão ou rajada acima de 32 nós limita a nota a 2 e marca como Perigoso. |
+| **Diário + ML** | Cada registro guarda as condições daquela hora. Com 8 ou mais registros (com saídas boas e fracas), uma regressão logística aprende o que funciona para você e entra na nota (até 50% do peso). |
+| **EPAGRI** | Importe o CSV horário de uma estação do CIRAM. O app compara com o modelo nas mesmas horas e corrige o vento por setor (MOS). |
+
+## Scripts de ML (`ml/`)
+
+```bash
+pip install -r ml/requirements.txt
+
+# Calibra o GFS com uma estação EPAGRI (meses de dados horários)
+python ml/calibrar_gfs_epagri.py --csv estacao.csv --lat -27.60 --lon -48.55 \
+    --unidade ms --modelo gfs_seamless --ponto ribeirao --saida calib.json
+# depois importe calib.json no app: Dados > JSON de calibração
+
+# Analisa o diário exportado do app
+python ml/analisar_diario.py diario-pesca.json
+```
+
+O script de calibração usa a API de previsões históricas da Open-Meteo (o que o GFS previu de fato em cada hora), valida no período final dos dados para não superestimar o ganho e compara com um GradientBoosting.
+
+## Ajustar os pontos
+
+Os pontos ficam na lista `SPOTS` no topo do script do `index.html`. Para cada um:
+
+- `wx`: exposição ao vento vindo de `[N, NE, L, SE, S, SO, O, NO]`, de 0 (abrigado) a 1 (aberto)
+- `sx`: o mesmo para a ondulação
+- `t`: `costao`, `praia`, `baia`, `canal` ou `lagoa`
+- `lag` / `amp`: atraso da maré em minutos e fator de amplitude
+- `m`: ponto de mar usado para ondas e maré, quando o ponto fica dentro da baía
+
+Os valores de exposição foram estimados pela geografia. Quem pesca nos pontos deve ajustá-los: é a parte que mais melhora a nota.
+
+## Limitações
+
+- A maré do modelo global é aproximada dentro das baías. Use a tábua da Marinha quando precisar do horário exato.
+- Vento sul forte e prolongado pode subir a maré 20 a 40 cm acima da prevista (maré meteorológica).
+- A EPAGRI não tem uma API pública estável, por isso a integração é por arquivo CSV.
+- A nota é uma estimativa. Confira as condições no local antes de sair.
