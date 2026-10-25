@@ -252,6 +252,8 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
         </div>
         <div><b>Marégrafo EPAGRI (nível medido)</b>
           <p class="small muted">No CIRAM, abra <a href="https://ciram.epagri.sc.gov.br/index.php/maregrafos/" target="_blank" rel="noopener">Marégrafos</a> &gt; Florianópolis e copie as últimas horas de medição: data, hora, nível observado e, se aparecerem, maré astronômica e resíduo (de 24 h a 7 dias). Cole aqui ou importe o CSV. O app compara com a previsão, acerta o horário e a altura da maré e soma a maré meteorológica (o quanto vento e pressão estão empurrando a água) nas próximas horas.</p>
+          <div class="row" style="margin-bottom:8px"><label class="inline" for="surgeNow">Resíduo agora no gráfico (cm)<input type="number" id="surgeNow" step="1" inputmode="numeric" placeholder="ex.: 25 ou -10" style="width:150px"></label><button class="btn" id="surgeApply" type="button" style="align-self:flex-end">Usar resíduo</button></div>
+          <p class="small muted" style="margin:0 0 6px">Jeito rápido: no gráfico de Florianópolis, veja o valor mais recente do resíduo (diferença entre o medido e a maré astronômica) e digite aqui. Para um ajuste completo, cole a série abaixo.</p>
           <textarea id="gaugeTxt" rows="5" style="width:100%" placeholder="data hora observado astronômica resíduo&#10;25/10/2026 21:00 0,82 0,61 0,21&#10;25/10/2026 21:15 0,85 0,63 0,22"></textarea>
           <div class="row" style="margin-top:6px"><button class="btn ghost" id="gaugeApply" type="button">Usar medições</button><label class="btn ghost" for="gaugeFile">CSV do marégrafo<input type="file" id="gaugeFile" accept=".csv,.txt,text/csv" hidden></label><button class="btn ghost" id="gaugeClear" type="button">Remover</button></div>
           <div id="gaugeMsg" class="small" style="margin-top:6px"></div>
@@ -482,7 +484,10 @@ function tideFor(sp){
  return{h:t.map(x=>{const v=B.fn(x-G.L*60e3);return v==null?null:G.b*v+k*surgeAt(x)}),src:B.src+" + marégrafo EPAGRI"}}
 /* Marégrafo: ajusta atraso (L), fator de altura (b) e referência (a) da previsão contra o medido.
    O que sobra (resíduo) é a maré meteorológica; no futuro ela decai em ~12 h. */
-function fitGauge(){S.gfit=null;S.gObs=null;const G=S.gauge;if(!G||!G.pts||G.pts.length<8||!S.data)return;
+function fitGauge(){S.gfit=null;S.gObs=null;const G=S.gauge;if(!G||!S.data)return;
+ const lastPt=G.pts&&G.pts.length?G.pts[G.pts.length-1].t:0;
+ if(G.quick&&(!G.pts||G.pts.length<8||G.quick.t>lastPt)){S.gfit={L:0,b:1,a:0,surge:G.quick.r,tLast:G.quick.t,res:[{t:G.quick.t,r:G.quick.r}],hasR:true,quick:true};return}
+ if(!G.pts||G.pts.length<8)return;
  const ref=SPOTS.find(s=>s.id==="pontes"),B=baseTide(ref);if(!B)return;
  let best=null;
  for(let L=-180;L<=180;L+=10){const xs=[],ys=[];for(const p of G.pts){const v=B.fn(p.t-L*60e3);if(v!=null){xs.push(v);ys.push(p.r!=null?p.h-p.r:p.h)}}
@@ -813,6 +818,9 @@ function applyGauge(txt){const pts=parseGauge(txt);const msg=$("#gaugeMsg");
  const old=(S.gauge&&S.gauge.pts)||[],m=new Map([...old,...pts].map(p=>[p.t,p]));const all=[...m.values()].filter(p=>p.t>Date.now()-10*24*HOUR).sort((a,b)=>a.t-b.t);
  S.gauge={pts:all,at:Date.now()};store("pf_gauge",S.gauge);rebuild();renderAll();const G=S.gfit;
  msg.innerHTML=G?`${all.length} medições de ${fmtDH.format(all[0].t)} a ${fmtDH.format(all[all.length-1].t)}. Ajuste: horário ${G.L>0?"+":""}${G.L} min, altura ×${G.b.toFixed(2)}, erro ${Math.round(G.rmseRaw*100)} → ${Math.round(G.rmse*100)} cm. Maré meteorológica agora: <b>${cm(G.surge)}</b>${G.hasR?" (resíduo informado pela EPAGRI)":" (estimada; cole também as colunas de maré astronômica e resíduo para ficar exata)"}.`:`${all.length} medições salvas, mas elas não coincidem com o período da previsão carregada (últimos 7 dias).`}
+$("#surgeApply").addEventListener("click",()=>{const v=parseFloat(String($("#surgeNow").value).replace(",","."));if(isNaN(v)){$("#gaugeMsg").textContent="Digite o resíduo em centímetros, por exemplo 25 ou -10.";return}
+ S.gauge=Object.assign({},S.gauge||{},{quick:{t:Date.now(),r:v/100}});store("pf_gauge",S.gauge);rebuild();renderAll();
+ $("#gaugeMsg").innerHTML=`Maré meteorológica de <b>${cm(v/100)}</b> somada à previsão a partir de agora. O efeito vai diminuindo em umas 12 horas; atualize quando olhar o gráfico de novo.`});
 $("#gaugeApply").addEventListener("click",()=>applyGauge($("#gaugeTxt").value));
 $("#gaugeFile").addEventListener("change",async e=>{const f=e.target.files[0];if(f)applyGauge(await f.text())});
 $("#gaugeClear").addEventListener("click",()=>{S.gauge=null;store("pf_gauge",null);rebuild();renderAll();$("#gaugeMsg").textContent="Medições removidas."});
