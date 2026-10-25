@@ -19,10 +19,13 @@ jobs:
       - name: Baixa a página dos marégrafos
         run: |
           mkdir -p data
-          curl -sSL -A "Mozilla/5.0 (pesqueiro-floripa)" -m 60 "https://ciram.epagri.sc.gov.br/index.php/maregrafos/" -o data/maregrafo_raw.html || true
+          rm -f data/maregrafo_raw.html
+          for e in "floripa getDataMare3_2951" "imbituba getDataMare6_2963"; do set -- $e
+            curl -sSL -D "data/$1_headers.txt" -A "Mozilla/5.0 (pesqueiro-floripa)" -m 60 "https://ciram.epagri.sc.gov.br/graficos/$2.php" -o "data/$1_raw.json" || true
+          done
           ls -la data
       - name: Extrai os dados
-        run: python3 tools/maregrafo.py data/maregrafo_raw.html data/maregrafo.json || true
+        run: python3 tools/maregrafo.py data data/maregrafo.json || true
       - name: Salva no repositório
         run: |
           git config user.name "pesqueiro-bot"
