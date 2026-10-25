@@ -7,6 +7,8 @@
 <title>Pesqueiro Floripa</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 /* Layout: uma coluna estilo carta náutica; cabeçalho fixo, seções empilhadas, duas colunas no desktop */
 :root{
@@ -118,6 +120,17 @@ table.t th{font-weight:600;color:var(--ink-3);font-size:12px;text-transform:uppe
 details{border-top:1px solid var(--line);padding-top:10px}
 summary{cursor:pointer;font-weight:600}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+#map{height:min(62vh,520px);border-radius:8px;border:1px solid var(--line);background:var(--surface-2);z-index:0}
+.mk{display:flex;align-items:center;gap:2px;font:500 12px var(--mono);border-radius:6px;padding:2px 5px;box-shadow:0 0 0 2px var(--surface);white-space:nowrap}
+.mk svg{flex:0 0 auto}
+.mk.sel{box-shadow:0 0 0 3px var(--sand)}
+.mk.pin{background:var(--sand);color:#1b1206}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink)}
+.leaflet-popup-content{margin:12px 14px;font:14px/1.45 var(--body);min-width:220px}
+.leaflet-container{font:inherit}
+.leaflet-container a.leaflet-popup-close-button{color:var(--ink-3)}
+.pop h4{margin:0 0 4px;font-size:15px}
+.pop .row{margin-top:8px}
 footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -132,6 +145,11 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 
 <main class="wrap">
   <div id="banner" class="banner" hidden></div>
+  <section class="card" aria-labelledby="h-mapa" style="margin-top:16px">
+    <div class="row"><h2 id="h-mapa" class="grow">Mapa</h2><span class="small muted">Toque em qualquer lugar para soltar um pin e ver a previsão daquele ponto.</span></div>
+    <div id="map" role="application" aria-label="Mapa de pontos de pesca"></div>
+    <div class="legend"><span>Número = nota no horário escolhido em "Onde ir"</span><span>Seta = para onde o vento sopra</span><span>Pin novo: abrigo calculado pelo relevo e pela distância de água em cada direção</span></div>
+  </section>
   <div class="grid">
     <!-- coluna 1: onde ir -->
     <section class="card" aria-labelledby="h-onde">
@@ -236,7 +254,7 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
  sx = exposição à onda vinda dessas direções
  lag = atraso da maré em minutos vs. o ponto do modelo; amp = fator de amplitude
  m = coordenada do ponto de mar (ondas/maré) quando diferente */
-const SPOTS=[
+const BASE_SPOTS=[
  {id:"ribeirao",n:"Ribeirão da Ilha (Ponta do Ribeirão)",r:"Sul da Ilha · Baía Sul",lat:-27.716,lon:-48.563,t:"baia",
   wx:[.8,.4,.15,.1,.15,.4,.9,1],sx:[0,0,0,0,.05,.05,0,0],lag:40,amp:1.1,m:[-27.80,-48.55],
   notes:"Morro da ilha segura vento sul e leste. Norte e noroeste entram direto pela Baía Sul. Corvina, pescadinha, robalo e bagre; melhor na troca de maré."},
@@ -292,6 +310,7 @@ const SPOTS=[
   wx:[1,.9,.6,.2,.1,.15,.3,.7],sx:[.3,.5,.4,.1,0,0,0,.2],lag:20,amp:1,
   notes:"Enseadas viradas para norte e nordeste: abrigadas de sul. Muito peixe de fundo com barco. Garoupa nas ilhas."}
 ];
+let SPOTS=[...BASE_SPOTS,...(store("pf_custom")||[])];
 const TYPE_LBL={costao:"Costão",praia:"Praia",baia:"Baía",canal:"Canal/Barra",lagoa:"Lagoa"};
 const MODELS=[{k:"gfs_seamless",n:"GFS"},{k:"ecmwf_ifs025",n:"ECMWF"},{k:"icon_seamless",n:"ICON"}];
 const TZ="America/Sao_Paulo", HOUR=3600e3, CENTER={lat:-27.6,lon:-48.5};
@@ -361,50 +380,56 @@ const S={data:null,demo:false,model:store("pf_model")||"gfs_seamless",spot:store
 
 /* ================== BUSCA DE DADOS ================== */
 async function fetchJSON(u){const r=await fetch(u);if(!r.ok)throw new Error(r.status+" "+(await r.text()).slice(0,140));return r.json()}
+function apiURLs(lats,lons,mlats,mlons){const common="&timeformat=unixtime&timezone=America%2FSao_Paulo&past_days=7&forecast_days=7";
+ return[`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,temperature_2m&models=${MODELS.map(m=>m.k).join(",")}&wind_speed_unit=kn${common}`,
+  `https://marine-api.open-meteo.com/v1/marine?latitude=${mlats}&longitude=${mlons}&hourly=wave_height,wave_direction,wave_period,sea_level_height_msl,sea_surface_temperature&cell_selection=sea${common}`]}
 async function load(){
  setStatus("Buscando previsão…");
  const lats=SPOTS.map(s=>s.lat).join(","),lons=SPOTS.map(s=>s.lon).join(",");
  const mlats=SPOTS.map(s=>(s.m||[s.lat,s.lon])[0]).join(","),mlons=SPOTS.map(s=>(s.m||[s.lat,s.lon])[1]).join(",");
- const common="&timeformat=unixtime&timezone=America%2FSao_Paulo&past_days=7&forecast_days=7";
- const fu=`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation,temperature_2m&models=${MODELS.map(m=>m.k).join(",")}&wind_speed_unit=kn${common}`;
- const mu=`https://marine-api.open-meteo.com/v1/marine?latitude=${mlats}&longitude=${mlons}&hourly=wave_height,wave_direction,wave_period,sea_level_height_msl,sea_surface_temperature&cell_selection=sea${common}`;
+ const [fu,mu]=apiURLs(lats,lons,mlats,mlons);
  try{
   const [fr,mr]=await Promise.all([fetchJSON(fu),fetchJSON(mu).catch(err=>{console.warn("marine",err);return null})]);
   S.data=parseData(Array.isArray(fr)?fr:[fr],mr?(Array.isArray(mr)?mr:[mr]):null);S.demo=false;
   if(!mr)showBanner("Ondas e maré do modelo marinho não responderam. Cole uma tábua de maré na seção Dados para ver a maré.",true);
-  store("pf_cache",{at:Date.now(),fr,mr});
+  store("pf_cache",{at:Date.now(),n:SPOTS.length,fr,mr});
  }catch(err){
   console.warn(err);
   const c=store("pf_cache");
-  if(c&&Date.now()-c.at<36*HOUR){S.data=parseData(Array.isArray(c.fr)?c.fr:[c.fr],c.mr?(Array.isArray(c.mr)?c.mr:[c.mr]):null);
+  if(c&&c.n===SPOTS.length&&Date.now()-c.at<36*HOUR){S.data=parseData(Array.isArray(c.fr)?c.fr:[c.fr],c.mr?(Array.isArray(c.mr)?c.mr:[c.mr]):null);
    showBanner("Sem conexão. Mostrando a última previsão salva ("+fmtDH.format(c.at)+").",true)}
   else{S.data=demoData();S.demo=true;showBanner("Sem conexão com a Open-Meteo. Mostrando DADOS DE EXEMPLO, que não são previsão real. Abra o app com internet para ver a previsão.",true)}
  }
  const t=S.data.t;S.events=astroEvents(t[0]-12*HOUR,t[t.length-1]+12*HOUR);
- rebuild();
+ rebuild();initMap();
  const now=Date.now();S.when=Math.max(0,S.data.t.findIndex(x=>x>now-HOUR));
  S.day=dayKey(S.data.t[S.when]);
  setStatus((S.demo?"Exemplo · ":"Atualizado ")+fmtH.format(Date.now()));
  renderAll();
 }
 function parseData(fr,mr){
- const t=fr[0].hourly.time.map(x=>x*1000),n=t.length;
+ const t=fr[0].hourly.time.map(x=>x*1000);
  const spots={};
- SPOTS.forEach((sp,i)=>{const F=fr[i].hourly,M=mr?mr[i].hourly:null;
-  const o={wind:{},dir:{},gust:{},pres:[],rain:[],temp:[]};
-  for(const m of MODELS){o.wind[m.k]=F["wind_speed_10m_"+m.k]||F.wind_speed_10m||[];o.dir[m.k]=F["wind_direction_10m_"+m.k]||F.wind_direction_10m||[];o.gust[m.k]=F["wind_gusts_10m_"+m.k]||F.wind_gusts_10m||[]}
-  const pick=v=>{const out=[];for(let h=0;h<n;h++){let x=null;for(const m of MODELS){const a=F[v+"_"+m.k]||F[v];if(a&&a[h]!=null){x=a[h];break}}out.push(x)}return out};
-  o.pres=pick("pressure_msl");o.rain=pick("precipitation");o.temp=pick("temperature_2m");
-  const idx=new Map((M?M.time:[]).map((x,k)=>[x*1000,k]));
-  const g=v=>t.map(x=>{const k=idx.get(x);return M&&k!=null&&M[v]?M[v][k]:null});
-  o.hs=g("wave_height");o.wdir=g("wave_direction");o.wper=g("wave_period");o.sea=g("sea_level_height_msl");o.sst=g("sea_surface_temperature");
-  spots[sp.id]=o});
+ SPOTS.forEach((sp,i)=>{spots[sp.id]=parseSpot(t,fr[i].hourly,mr?mr[i].hourly:null)});
  return{t,spots}}
+function parseSpot(t,F,M){ // alinha tudo pelo horário (funciona para um ponto avulso também)
+ const o={wind:{},dir:{},gust:{}};
+ const iF=new Map(F.time.map((x,k)=>[x*1000,k])),iM=new Map((M?M.time:[]).map((x,k)=>[x*1000,k]));
+ const al=(a,ix)=>t.map(x=>{const k=ix.get(x);return a&&k!=null&&a[k]!=null?a[k]:null});
+ for(const m of MODELS){o.wind[m.k]=al(F["wind_speed_10m_"+m.k]||F.wind_speed_10m,iF);o.dir[m.k]=al(F["wind_direction_10m_"+m.k]||F.wind_direction_10m,iF);o.gust[m.k]=al(F["wind_gusts_10m_"+m.k]||F.wind_gusts_10m,iF)}
+ const pick=v=>{const arrs=MODELS.map(m=>al(F[v+"_"+m.k]||F[v],iF));return t.map((_,h)=>{for(const a of arrs)if(a[h]!=null)return a[h];return null})};
+ o.pres=pick("pressure_msl");o.rain=pick("precipitation");o.temp=pick("temperature_2m");
+ const g=v=>al(M?M[v]:null,iM);
+ o.hs=g("wave_height");o.wdir=g("wave_direction");o.wper=g("wave_period");o.sea=g("sea_level_height_msl");o.sst=g("sea_surface_temperature");
+ return o}
 
 /* Dados de exemplo para quando não há internet (claramente sinalizados) */
 function demoData(){
  const t0=Math.floor(Date.now()/HOUR)*HOUR-7*24*HOUR,n=14*24,t=[...Array(n)].map((_,h)=>t0+h*HOUR),spots={};
- SPOTS.forEach((sp,si)=>{const o={wind:{},dir:{},gust:{},pres:[],rain:[],temp:[],hs:[],wdir:[],wper:[],sea:[],sst:[]};
+ SPOTS.forEach(sp=>{spots[sp.id]=demoSpot(t)});
+ return{t,spots}}
+function demoSpot(t){const n=t.length;
+ {const o={wind:{},dir:{},gust:{},pres:[],rain:[],temp:[],hs:[],wdir:[],wper:[],sea:[],sst:[]},si=0;
   const base=[],dir=[];
   for(let h=0;h<n;h++){const day=h/24;const front=Math.exp(-((day-9)**2)/0.6)+Math.exp(-((day-3)**2)/0.5);
    base.push(Math.max(1,7+4*Math.sin(2*Math.PI*(h-15)/24)+14*front));
@@ -413,8 +438,7 @@ function demoData(){
    o.hs.push(0.9+1.6*front);o.wdir.push(front>.3?165:100);o.wper.push(8+3*front);o.sst.push(21);
    const th=h+si*0;o.sea.push(0.27*Math.cos(2*Math.PI*th/12.42)+0.12*Math.cos(2*Math.PI*th/12+1)+0.11*Math.cos(2*Math.PI*th/25.82+2)+0.07*Math.cos(2*Math.PI*th/23.93)+0.15*front)}
   MODELS.forEach((m,k)=>{const f=[1,0.88,1.1][k],b=[0,1,-0.5][k];o.wind[m.k]=base.map(x=>Math.max(0,x*f+b));o.dir[m.k]=dir.map(d=>d+k*8);o.gust[m.k]=o.wind[m.k].map(x=>x*1.45)});
-  spots[sp.id]=o});
- return{t,spots}}
+  return o}}
 
 /* ================== MARÉ ================== */
 function interpAt(t,arr,x){ // valor de arr no instante x (ms)
@@ -458,8 +482,10 @@ function solScore(ms){let best=.35,why=null;
  return{v:best,why}}
 
 function rebuild(){ // recalcula tudo do modelo atual
- S.derived={};const t=S.data.t,n=t.length;
- for(const sp of SPOTS){const o=S.data.spots[sp.id],tide=tideFor(sp),cal=calibFor(sp.id,S.model);
+ S.derived={};for(const sp of SPOTS)computeSpot(sp);
+ trainML();applyML()}
+function computeSpot(sp){const t=S.data.t,n=t.length;
+ {const o=S.data.spots[sp.id],tide=tideFor(sp),cal=calibFor(sp.id,S.model);
   const rate=tide.h.map((v,i)=>{const a=tide.h[i-1],b=tide.h[i+1];if(v==null)return null;if(a!=null&&b!=null)return(b-a)/2;if(b!=null)return b-v;if(a!=null)return v-a;return null});
   const rows=[];
   for(let i=0;i<n;i++){
@@ -490,8 +516,7 @@ function rebuild(){ // recalcula tudo do modelo atual
    if(gc!=null&&gc>32)danger=(danger?danger+" e ":"")+"rajadas fortes";
    if(danger)sc=Math.min(sc,2);
    rows.push({i,t:t[i],raw:w,rawModel:raw,all,d,g:gc,exp,eff,wave,hs:o.hs[i],wdir:o.wdir[i],tide:tide.h[i],rate:rate[i],lvl,mov,rising,dp,sol,rf,c,score:clamp(sc,0,10),bonus,danger,sst:o.sst[i],rain:o.rain[i],pres:o.pres[i]})}
-  S.derived[sp.id]={rows,tideSrc:tide.src}}
- trainML();applyML()}
+  S.derived[sp.id]={rows,tideSrc:tide.src}}}
 
 /* ================== APRENDIZADO PESSOAL (regressão logística) ================== */
 const FEATS=[["vento","Vento no ponto (fraco)"],["mar","Mar adequado"],["mare","Movimento de maré"],["enchendo","Maré enchendo"],["nivel","Maré alta"],["sol","Sol/lua (períodos)"],["pres","Pressão favorável"],["sizigia","Maré de sizígia"],["noite","Noite"],["agua","Água quente"]];
@@ -509,7 +534,7 @@ function trainML(){
  let acc=0;Z.forEach((z,k)=>{const p=1/(1+Math.exp(-(b+z.reduce((s,v,j)=>s+v*w[j],0))));acc+=((p>.5)===(ys[k]===1))?1:0});
  S.ml={n:L.length,ready:true,w,b,mu,sd,acc:acc/L.length,alpha:Math.min(.5,L.length/40)}}
 function mlProb(r){const m=S.ml;const f=featOf(r);const z=FEATS.map(([k],j)=>(f[k]-m.mu[j])/m.sd[j]);return 1/(1+Math.exp(-(m.b+z.reduce((s,v,j)=>s+v*m.w[j],0))))}
-function applyML(){for(const sp of SPOTS)for(const r of S.derived[sp.id].rows){r.base=r.score;if(S.ml&&S.ml.ready&&!r.danger){r.p=mlProb(r);r.score=(1-S.ml.alpha)*r.base+S.ml.alpha*10*r.p}}}
+function applyML(){for(const sp of SPOTS)for(const r of S.derived[sp.id].rows){if(r.base==null)r.base=r.score;r.score=r.base;if(S.ml&&S.ml.ready&&!r.danger){r.p=mlProb(r);r.score=(1-S.ml.alpha)*r.base+S.ml.alpha*10*r.p}}}
 
 /* ================== TEXTOS ================== */
 function verdict(sc){return sc>=7.5?["Ótimo","good"]:sc>=6?["Bom","good"]:sc>=4.5?["Regular","warn"]:["Fraco","bad"]}
@@ -533,6 +558,7 @@ function renderAll(){renderModels();renderRank();renderSpot();renderSpecies();re
 function renderModels(){const el=$("#modelSeg");el.innerHTML=MODELS.map(m=>`<button type="button" data-m="${m.k}" aria-pressed="${m.k===S.model}">${m.n}</button>`).join("");
  $("#rankModel").textContent="Modelo "+MODELS.find(m=>m.k===S.model).n+(S.ml&&S.ml.ready?" + seu histórico":"")}
 function renderRank(){
+ updateMarkers();
  const t=S.data.t,i=S.when;const sl=$("#when");sl.max=t.length-1;sl.value=i;$("#whenLbl").textContent=fmtDH.format(t[i]);
  const list=SPOTS.map(sp=>({sp,r:S.derived[sp.id].rows[i]})).sort((a,b)=>b.r.score-a.r.score);
  $("#rank").innerHTML=list.map(({sp,r})=>{const[v]=verdict(r.score);return`<li><button class="spot" data-spot="${sp.id}" aria-current="${sp.id===S.spot}">
@@ -559,7 +585,7 @@ function renderSpot(){
   [`${Math.round(il.frac*100)}%`,`${moonName(il.phase)} · ${r.rf>.6?"sizígia":r.rf<.35?"quadratura":"intermediária"}`],
   [modelSpread(r),"Concordância dos modelos"]
  ].map(([a,b])=>`<div><b>${a}</b><span>${b}</span></div>`).join("");
- $("#spotNotes").textContent=sp.notes;
+ $("#spotNotes").innerHTML=esc(sp.notes)+(sp.custom?`<br><span class="row" style="margin-top:6px">${sp.temp?`<input type="text" id="pinName2" placeholder="Nome do ponto" style="flex:1;min-width:140px"><button class="btn" type="button" data-pinsave="2">Salvar ponto</button>`:`<button class="btn ghost" type="button" data-deldspot="${sp.id}">Remover este ponto</button>`}<label class="inline" for="pinType" style="flex-direction:row;align-items:center;gap:6px">Tipo <select id="pinType">${Object.entries(TYPE_LBL).map(([k,v])=>`<option value="${k}"${k===sp.t?" selected":""}>${v}</option>`).join("")}</select></label></span>`:"");
  $("#windyLink").href=`https://www.windy.com/${sp.lat}/${sp.lon}?gfs,${sp.lat},${sp.lon},12`;
  $("#rose").innerHTML=roseSVG(sp,r.d);
  renderDays();renderCharts();renderWindows()}
@@ -630,7 +656,8 @@ function renderSpecies(){const mon=+fmtKey.format(Date.now()).slice(5,7);const s
  $("#species").innerHTML=list.map(s=>`<div><b>${s.n}</b><span class="small">${esc(s.pl)}</span><br><span class="small muted">${esc(s.tip)}</span>${sst!=null?`<br><span class="tag ${s.ok?"good":"neu"}" style="margin-top:6px">${s.ok?"água na faixa":"água fora da faixa"} (${s.tmp[0]}–${s.tmp[1]} °C)</span>`:""}</div>`).join("")}
 function renderLog(){
  const opts=SPOTS.map(s=>`<option value="${s.id}">${esc(s.n)}</option>`).join("");
- if(!$("#lgSpot").options.length){$("#lgSpot").innerHTML=opts;$("#epSpot").innerHTML=`<option value="all">Todos os pontos</option>`+opts;$("#lgSp").innerHTML=SPECIES.map(s=>`<option>${s.n}</option>`).join("")+"<option>Outra</option>";$("#lgWhen").value=localInput(Date.now())}
+ if($("#lgSpot").dataset.n!==String(SPOTS.length)){const ep=$("#epSpot").value;$("#lgSpot").innerHTML=opts;$("#lgSpot").dataset.n=SPOTS.length;$("#epSpot").innerHTML=`<option value="all">Todos os pontos</option>`+opts;if(ep)$("#epSpot").value=ep}
+ if(!$("#lgSp").options.length){$("#lgSp").innerHTML=SPECIES.map(s=>`<option>${s.n}</option>`).join("")+"<option>Outra</option>";$("#lgWhen").value=localInput(Date.now())}
  $("#lgSpot").value=S.spot;
  const L=S.log.slice().sort((a,b)=>b.t-a.t);
  $("#logTable").innerHTML=L.length?`<thead><tr><th>Quando</th><th>Ponto</th><th>Espécie</th><th>Resultado</th><th></th></tr></thead><tbody>${L.map(x=>`<tr><td class="num">${fmtDH.format(x.t)}</td><td>${esc((SPOTS.find(s=>s.id===x.spot)||{}).n||x.spot)}</td><td>${esc(x.sp)}</td><td>${["Nada","Fraco","Bom","Muito bom"][x.res]}${x.f?"":" <span class='muted small'>(sem condições)</span>"}</td><td><button class="btn ghost small" data-del="${x.id}" type="button">Apagar</button></td></tr>`).join("")}</tbody>`:"";
@@ -646,7 +673,9 @@ function parseLocal(s){// "YYYY-MM-DDTHH:MM" em horário de Brasília (UTC-3, se
 /* ================== EVENTOS ================== */
 document.addEventListener("click",ev=>{const b=ev.target.closest("button");if(!b)return;
  if(b.dataset.m){S.model=b.dataset.m;store("pf_model",S.model);rebuild();renderAll()}
- else if(b.dataset.spot){S.spot=b.dataset.spot;store("pf_spot",S.spot);S.day=dayKey(S.data.t[S.when]);renderRank();renderSpot();renderLog();if(innerWidth<960)$("#spotName").scrollIntoView({behavior:"smooth",block:"start"})}
+ else if(b.dataset.spot){if(MAP)MAP.closePopup();selectSpot(b.dataset.spot)}
+ else if(b.dataset.pinsave)savePin(($("#pinName")||{}).value||($("#pinName2")||{}).value||"");
+ else if(b.dataset.deldspot){SPOTS=SPOTS.filter(x=>x.id!==b.dataset.deldspot);saveCustom();S.spot="ribeirao";renderAll()}
  else if(b.dataset.day){S.day=b.dataset.day;renderDays();renderCharts()}
  else if(b.dataset.jump){const t=S.data.t,now=Date.now(),today=dayKey(now);let target=now;
   const at=(dk,h)=>t.find(x=>dayKey(x)===dk&&localHour(x)===h);const tomorrow=dayKey(now+24*HOUR);
@@ -698,6 +727,85 @@ $("#tideApply").addEventListener("click",()=>{const ex=[];$("#tideTxt").value.sp
  ex.sort((a,b)=>a.t-b.t);if(ex.length<2){$("#tideMsg").textContent="Preciso de pelo menos 2 linhas no formato 2026-10-25 04:12; 0.9";return}
  const mean=ex.reduce((s,x)=>s+x.h,0)/ex.length;S.tideTable=ex.map(x=>({t:x.t,h:x.h-mean}));store("pf_tide",S.tideTable);rebuild();renderAll();$("#tideMsg").textContent=`${ex.length} extremos carregados (alturas centradas no nível médio).`});
 $("#tideClear").addEventListener("click",()=>{S.tideTable=null;store("pf_tide",null);rebuild();renderAll();$("#tideMsg").textContent="Usando o modelo."});
+
+document.addEventListener("change",e=>{if(e.target.id!=="pinType")return;const sp=spot();if(!sp.custom)return;sp.t=e.target.value;if(!sp.temp)saveCustom();computeSpot(sp);applyML();renderAll()});
+
+/* ================== MAPA E PIN ================== */
+let MAP=null,MK={},PIN=null;
+const distKm=(a,b)=>Math.hypot((a.lat-b.lat)*110.57,(a.lon-b.lon)*111.32*Math.cos(a.lat*rad));
+function initMap(){if(MAP)return;
+ if(!window.L){$("#map").innerHTML='<p class="small muted" style="padding:12px">O mapa não carregou (sem internet ou biblioteca bloqueada). O resto do app funciona.</p>';return}
+ MAP=L.map("map").setView([-27.62,-48.52],10);
+ const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap"});
+ const sat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:18,attribution:"Imagem © Esri"});
+ osm.addTo(MAP);L.control.layers({"Mapa":osm,"Satélite":sat},null,{position:"topright"}).addTo(MAP);
+ MAP.fitBounds(L.latLngBounds(BASE_SPOTS.map(s=>[s.lat,s.lon])).pad(.05));
+ MAP.on("click",e=>dropPin(e.latlng.lat,e.latlng.lng));
+ updateMarkers()}
+function markerIcon(sp,r){return L.divIcon({className:"",iconSize:null,iconAnchor:[20,12],
+ html:`<div class="mk${sp.id===S.spot?" sel":""}${sp.temp?" pin":""}" style="${sp.temp?"":pillStyle(r.score)}">${arrow(r.d,11)}${r.score.toFixed(1)}</div>`})}
+function updateMarkers(){if(!MAP||!S.data)return;const ids=new Set(SPOTS.map(s=>s.id));
+ for(const id in MK)if(!ids.has(id)){MAP.removeLayer(MK[id]);delete MK[id]}
+ for(const sp of SPOTS){const D=S.derived[sp.id];if(!D)continue;const r=D.rows[S.when];
+  if(!MK[sp.id])MK[sp.id]=L.marker([sp.lat,sp.lon],{title:sp.n}).addTo(MAP).on("click",ev=>{L.DomEvent.stopPropagation(ev);const s2=SPOTS.find(x=>x.id===sp.id);if(!s2)return;selectSpot(s2.id,false);openPopup(s2)});
+  MK[sp.id].setIcon(markerIcon(sp,r));MK[sp.id].setZIndexOffset(sp.id===S.spot?1000:0)}}
+function selectSpot(id,scroll=true){S.spot=id;store("pf_spot",S.spot);S.day=dayKey(S.data.t[S.when]);renderRank();renderSpot();renderLog();if(scroll&&innerWidth<960)$("#spotName").scrollIntoView({behavior:"smooth",block:"start"})}
+function popupHTML(sp){const r=S.derived[sp.id].rows[S.when];const[v,cls]=verdict(r.score);
+ return`<div class="pop"><h4>${esc(sp.n)}</h4><div><span class="tag ${r.danger?"bad":cls}">${r.danger?"Perigoso":v}</span> <b class="num">${r.score.toFixed(1)}</b>/10 · ${fmtDH.format(r.t)}</div>
+ <div class="small">${esc(reasons(r,sp).join(" · "))}</div>
+ <div class="small num" style="margin-top:4px">Vento ${r.d!=null?dir16(r.d):"–"} ${r.raw!=null?Math.round(r.raw):"–"} → ${r.eff!=null?Math.round(r.eff):"–"} nós no ponto · onda ${r.wave!=null?r.wave.toFixed(1)+" m":"–"} · maré ${r.tide!=null?r.tide.toFixed(2)+" m"+(r.rate!=null?(r.rate>0?" ↑":" ↓"):""):"–"}</div>
+ ${sp.temp?`<div class="small muted" style="margin-top:4px">${esc(sp.notes)}</div><div class="row"><input type="text" id="pinName" placeholder="Nome do ponto" style="flex:1;min-width:0"><button class="btn" type="button" data-pinsave="1">Salvar</button></div>`:""}
+ <div class="row"><button class="btn ghost" type="button" data-spot="${sp.id}">Ver detalhes e gráficos</button></div></div>`}
+function openPopup(sp){const m=MK[sp.id];if(!m)return;m.unbindPopup();m.bindPopup(popupHTML(sp),{maxWidth:300,autoPanPadding:[20,20]}).openPopup()}
+
+/* Exposição calculada: para cada uma das 16 direções, olha 0,4 a 25 km na direção de onde vem o vento.
+   Distância até a primeira terra (pista de vento) e ângulo dos morros dizem o quanto o vento e a onda chegam. */
+const RAY_D=[.4,.8,1.5,3,6,12,25];
+async function terrainExposure(lat,lon){
+ const pts=[];for(let k=0;k<16;k++){const b=k*22.5*rad;for(const d of RAY_D)pts.push([lat+d/110.57*Math.cos(b),lon+d/(111.32*Math.cos(lat*rad))*Math.sin(b)])}
+ const el=[];for(let s=0;s<pts.length;s+=56){const ch=pts.slice(s,s+56);
+  const j=await fetchJSON(`https://api.open-meteo.com/v1/elevation?latitude=${ch.map(p=>p[0].toFixed(4)).join(",")}&longitude=${ch.map(p=>p[1].toFixed(4)).join(",")}`);el.push(...j.elevation)}
+ const w16=[],s16=[];let relief=0;
+ for(let k=0;k<16;k++){let fetch=30,ang=0;
+  RAY_D.forEach((d,j)=>{const e=el[k*RAY_D.length+j];if(e>1.5){if(fetch===30)fetch=d;ang=Math.max(ang,Math.atan(e/(d*1000))/rad);if(d<=.8)relief=Math.max(relief,e)}});
+  w16.push(clamp((.2+.8*Math.min(1,fetch/5))*(1-clamp(ang/10,0,.85)),.05,1));
+  s16.push(fetch>=30?1:fetch>=12?.45:fetch>=6?.15:0)}
+ const to8=a=>[...Array(8)].map((_,i)=>+((2*a[2*i]+a[(2*i+15)%16]+a[(2*i+1)%16])/4).toFixed(2));
+ return{wx:to8(w16),sx:to8(s16),relief}}
+function pinMarineCoord(lat,lon){
+ if(lat>-27.64&&lat<-27.55&&lon>-48.49&&lon<-48.43)return{kind:"lagoa",m:[-27.57,-48.40]};
+ const near=BASE_SPOTS.slice().sort((a,b)=>distKm(a,{lat,lon})-distKm(b,{lat,lon}))[0];
+ if(lon<-48.50&&lat>-27.86&&lat<-27.40&&(near.t==="baia"||near.t==="canal"))return{kind:"baia",m:near.m||[near.lat,near.lon],near};
+ return{kind:"mar",m:[lat,lon],near}}
+async function fetchPoint(lat,lon,m){
+ if(S.demo)return demoSpot(S.data.t);
+ const [fu,mu]=apiURLs(lat.toFixed(4),lon.toFixed(4),m[0].toFixed(4),m[1].toFixed(4));
+ const [fr,mr]=await Promise.all([fetchJSON(fu),fetchJSON(mu).catch(()=>null)]);
+ return parseSpot(S.data.t,fr.hourly,mr?mr.hourly:null)}
+function makePinSpot(lat,lon,ex,mc){
+ const near=mc.near||BASE_SPOTS.slice().sort((a,b)=>distKm(a,{lat,lon})-distKm(b,{lat,lon}))[0];
+ const wx=ex?ex.wx:near.wx.slice(),sx=ex?ex.sx:near.sx.slice();
+ const t=mc.kind==="lagoa"?"lagoa":mc.kind==="baia"?"baia":(ex&&ex.relief>40?"costao":Math.max(...sx)<.3?"baia":"praia");
+ const ab=DIR8.filter((_,i)=>wx[i]<.3),ex_=DIR8.filter((_,i)=>wx[i]>.7);
+ const notes=(ab.length?`Abrigado de ${ab.join(", ")}. `:"Pouco abrigo. ")+(ex_.length?`Exposto a ${ex_.join(", ")}. `:"")+
+  (ex?"Exposição calculada pelo relevo e pela distância de água em cada direção (modelo de terreno Copernicus via Open-Meteo).":`Sem dados de relevo: usei a exposição do ponto mais próximo (${near.n}).`)+" Confira o tipo de ponto.";
+ return{id:"pin",custom:true,temp:true,n:`Pin ${(-lat).toFixed(3)}S ${(-lon).toFixed(3)}O`,r:"Ponto marcado no mapa",lat,lon,t,wx,sx,
+  lag:mc.kind==="lagoa"?180:mc.kind==="baia"?45:0,amp:mc.kind==="lagoa"?.15:mc.kind==="baia"?1.1:1,m:mc.m,notes}}
+async function dropPin(lat,lon){
+ const near=SPOTS.find(s=>!s.temp&&distKm(s,{lat,lon})<.5);
+ if(near){selectSpot(near.id,false);openPopup(near);return}
+ PIN=L.popup({maxWidth:300}).setLatLng([lat,lon]).setContent('<div class="pop">Buscando a previsão e analisando o relevo em volta…</div>').openOn(MAP);
+ try{const mc=pinMarineCoord(lat,lon);
+  const [o,ex]=await Promise.all([fetchPoint(lat,lon,mc.m),S.demo?null:terrainExposure(lat,lon).catch(err=>{console.warn(err);return null})]);
+  const sp=makePinSpot(lat,lon,ex,mc);
+  SPOTS=SPOTS.filter(s=>!s.temp);SPOTS.push(sp);S.data.spots[sp.id]=o;computeSpot(sp);applyML();
+  MAP.closePopup(PIN);PIN=null;selectSpot(sp.id,false);openPopup(sp)}
+ catch(err){PIN.setContent(`<div class="pop">Não consegui buscar a previsão deste ponto: ${esc(err.message)}</div>`)}}
+function saveCustom(){store("pf_custom",SPOTS.filter(s=>s.custom&&!s.temp))}
+function savePin(name){const sp=SPOTS.find(s=>s.temp);if(!sp)return;const id="c"+Date.now().toString(36);
+ S.data.spots[id]=S.data.spots[sp.id];S.derived[id]=S.derived[sp.id];delete S.data.spots[sp.id];delete S.derived[sp.id];
+ sp.id=id;sp.temp=false;sp.r="Meu ponto";if(name.trim())sp.n=name.trim().slice(0,60);saveCustom();
+ if(MAP)MAP.closePopup();S.spot=id;store("pf_spot",id);renderAll();setTimeout(()=>openPopup(sp),50)}
 
 load();
 </script>

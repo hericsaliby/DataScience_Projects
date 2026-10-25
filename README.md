@@ -14,6 +14,8 @@ Previsão de pesca para a Grande Florianópolis: junta vento (GFS, ECMWF ou ICON
 
 | Parte | Como funciona |
 |---|---|
+| **Mapa** | Mapa (ruas ou satélite) com todos os pontos e a nota do horário escolhido. Toque em qualquer lugar para soltar um pin: o app busca a previsão daquele local e calcula o abrigo sozinho. Depois é só dar um nome e salvar como "meu ponto". |
+| **Abrigo automático do pin** | Para 16 direções, o app consulta a altitude do terreno (Copernicus DEM pela Open-Meteo) de 0,4 a 25 km de distância. Terra perto e morro alto naquela direção significam abrigo; água aberta por mais de 25 km significa ondulação de mar aberto. O tipo (costão, praia, baía) é sugerido e pode ser trocado. |
 | **Onde ir** | Ranking dos 18 pontos para o horário escolhido, com o motivo de cada nota (abrigado/exposto, maré, mar, lua). |
 | **Abrigo** | Cada ponto tem uma rosa de exposição em 8 setores para vento e outra para ondulação. O vento "no ponto" é o vento aberto reduzido pelo abrigo. |
 | **Modelos** | GFS, ECMWF IFS 0.25 e ICON. A faixa no gráfico mostra o quanto os modelos discordam: faixa larga significa previsão incerta. |
