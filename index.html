@@ -251,9 +251,10 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
           <label class="row small" for="useCal" style="margin-top:6px"><input type="checkbox" id="useCal" checked> Usar calibração EPAGRI quando houver</label>
         </div>
         <div><b>Marégrafo EPAGRI (nível medido)</b>
+          <p class="small" id="epStatus"></p>
           <p class="small muted">No CIRAM, abra <a href="https://ciram.epagri.sc.gov.br/index.php/maregrafos/" target="_blank" rel="noopener">Marégrafos</a> &gt; Florianópolis e copie as últimas horas de medição: data, hora, nível observado e, se aparecerem, maré astronômica e resíduo (de 24 h a 7 dias). Cole aqui ou importe o CSV. O app compara com a previsão, acerta o horário e a altura da maré e soma a maré meteorológica (o quanto vento e pressão estão empurrando a água) nas próximas horas.</p>
           <div class="row" style="margin-bottom:8px"><label class="inline" for="surgeNow">Resíduo agora no gráfico (cm)<input type="number" id="surgeNow" step="1" inputmode="numeric" placeholder="ex.: 25 ou -10" style="width:150px"></label><button class="btn" id="surgeApply" type="button" style="align-self:flex-end">Usar resíduo</button></div>
-          <p class="small muted" style="margin:0 0 6px">Jeito rápido: no gráfico de Florianópolis, veja o valor mais recente do resíduo (diferença entre o medido e a maré astronômica) e digite aqui. Para um ajuste completo, cole a série abaixo.</p>
+          <p class="small muted" style="margin:0 0 6px">O app lê os marégrafos sozinho a cada abertura. Use os campos abaixo só se a leitura automática falhar. Jeito rápido: no gráfico de Florianópolis, veja o valor mais recente do resíduo (diferença entre o medido e a maré astronômica) e digite aqui. Para um ajuste completo, cole a série abaixo.</p>
           <textarea id="gaugeTxt" rows="5" style="width:100%" placeholder="data hora observado astronômica resíduo&#10;25/10/2026 21:00 0,82 0,61 0,21&#10;25/10/2026 21:15 0,85 0,63 0,22"></textarea>
           <div class="row" style="margin-top:6px"><button class="btn ghost" id="gaugeApply" type="button">Usar medições</button><label class="btn ghost" for="gaugeFile">CSV do marégrafo<input type="file" id="gaugeFile" accept=".csv,.txt,text/csv" hidden></label><button class="btn ghost" id="gaugeClear" type="button">Remover</button></div>
           <div id="gaugeMsg" class="small" style="margin-top:6px"></div>
@@ -413,7 +414,7 @@ async function load(){
  const mlats=SPOTS.map(s=>(s.m||[s.lat,s.lon])[0]).join(","),mlons=SPOTS.map(s=>(s.m||[s.lat,s.lon])[1]).join(",");
  const [fu,mu]=apiURLs(lats,lons,mlats,mlons);
  try{
-  const [fr,mr]=await Promise.all([fetchJSON(fu),fetchJSON(mu).catch(err=>{console.warn("marine",err);return null})]);
+  const [fr,mr]=await Promise.all([fetchJSON(fu),fetchJSON(mu).catch(err=>{console.warn("marine",err);return null}),loadEpagri()]);
   S.data=parseData(Array.isArray(fr)?fr:[fr],mr?(Array.isArray(mr)?mr:[mr]):null);S.demo=false;
   if(!mr)showBanner("Ondas e maré do modelo marinho não responderam. Cole uma tábua de maré na seção Dados para ver a maré.",true);
   store("pf_cache2",{at:Date.now(),n:SPOTS.length,fr,mr});
@@ -422,7 +423,7 @@ async function load(){
   const c=store("pf_cache2");
   if(c&&c.n===SPOTS.length&&Date.now()-c.at<36*HOUR){S.data=parseData(Array.isArray(c.fr)?c.fr:[c.fr],c.mr?(Array.isArray(c.mr)?c.mr:[c.mr]):null);
    showBanner("Sem conexão. Mostrando a última previsão salva ("+fmtDH.format(c.at)+").",true)}
-  else{S.data=demoData();S.demo=true;showBanner("Sem conexão com a Open-Meteo. Mostrando DADOS DE EXEMPLO, que não são previsão real. Abra o app com internet para ver a previsão.",true)}
+  else{S.data=demoData();S.demo=true;S.ep=null;showBanner("Sem conexão com a Open-Meteo. Mostrando DADOS DE EXEMPLO, que não são previsão real. Abra o app com internet para ver a previsão.",true)}
  }
  const t=S.data.t;S.events=astroEvents(t[0]-12*HOUR,t[t.length-1]+12*HOUR);
  rebuild();initMap();
@@ -476,15 +477,57 @@ function baseTide(sp){ // função x(ms) -> nível previsto (m, nível médio) a
  if(S.tideTable&&S.tideTable.length>1){const lag=Math.max(0,sp.lag-45)*60e3,f=sp.t==="lagoa"?sp.amp:1;return{src:"tábua",fn:x=>{const v=tableAt(x-lag);return v==null?null:v*f}}}
  if(!o.sea||!o.sea.some(v=>v!=null))return null;
  return{src:"modelo",fn:x=>{const v=interpAt(t,o.sea,x-sp.lag*60e3);return v==null?null:v*sp.amp}}}
+/* ================== MARÉGRAFOS EPAGRI/CIRAM (leitura direta, a cada 15 min) ==================
+ Colunas: observado, astronômica, resíduo (obs-astro), previsão MohidSC, resíduo previsto, nível médio (NMM), em cm. */
+const EP_ST={floripa:{n:"Florianópolis",url:"https://ciram.epagri.sc.gov.br/graficos/getDataMare3_2951.php",lagRef:50,ampRef:1.05},
+ imbituba:{n:"Imbituba",url:"https://ciram.epagri.sc.gov.br/graficos/getDataMare6_2963.php",lagRef:0,ampRef:1}};
+function epTime(s){const m=String(s).match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(\d{1,2}):(\d{2})/);if(!m)return null;
+ const now=new Date(Date.now()-3*HOUR);let y=m[3]?+m[3]:now.getUTCFullYear();if(y<100)y+=2000;const mo=+m[2];
+ if(!m[3]){const nm=now.getUTCMonth()+1;if(mo===12&&nm===1)y--;if(mo===1&&nm===12)y++}
+ return Date.UTC(y,mo-1,+m[1],+m[4]+3,+m[5])}
+function parseEpagri(j){const num=v=>{if(v==null)return null;const x=parseFloat(String(v).trim());return isNaN(x)?null:x};
+ const rows=(j.rows||[]).map(r=>{const c=(r.c||[]).map(x=>x&&typeof x==="object"?x.v:x);return{t:epTime(c[0]),obs:num(c[1]),ast:num(c[2]),res:num(c[3]),prev:num(c[4]),pres:num(c[5]),nmm:num(c[6])}}).filter(r=>r.t);
+ rows.sort((a,b)=>a.t-b.t);return rows}
+async function loadEpagri(){S.ep={};
+ await Promise.all(Object.entries(EP_ST).map(async([k,st])=>{try{const rows=parseEpagri(await fetchJSON(st.url));if(rows.length)S.ep[k]=buildGauge(rows)}catch(e){console.warn("EPAGRI",k,e)}}));
+ if(Object.keys(S.ep).length)store("pf_ep",{at:Date.now(),ep:Object.fromEntries(Object.entries(S.ep).map(([k,g])=>[k,g.rows]))});
+ else{const c=store("pf_ep");if(c&&Date.now()-c.at<12*HOUR)for(const k in c.ep)S.ep[k]=buildGauge(c.ep[k])}}
+/* Série contínua do marégrafo em metros sobre o nível médio:
+   passado = medido; futuro = astronômica + resíduo, com o resíduo saindo do valor medido agora
+   e convergindo para o resíduo previsto pelo MohidSC em ~12 h. */
+function buildGauge(rows){const nmm=(rows.find(r=>r.nmm!=null)||{}).nmm??0;
+ const obsRows=rows.filter(r=>r.obs!=null),last=obsRows[obsRows.length-1]||null;
+ const tail=last?obsRows.filter(r=>r.t>last.t-HOUR&&r.res!=null):[];const r0=tail.length?tail.reduce((s,r)=>s+r.res,0)/tail.length:null;
+ const fut=rows.filter(r=>(!last||r.t>last.t)&&r.ast!=null);
+ const rp=r=>r.pres!=null?r.pres:(r.prev!=null?r.prev-r.ast:null);
+ const firstRp=(fut.find(r=>rp(r)!=null)||{});const rp0=firstRp.t?rp(firstRp):0;
+ let lastRp=rp0,lastRpT=last?last.t:(fut[0]||{}).t;
+ const T=[],V=[];
+ for(const r of rows){let v=null;
+  if(last&&r.t<=last.t){if(r.obs!=null)v=r.obs}
+  else if(r.ast!=null){let res=rp(r);if(res!=null){lastRp=res;lastRpT=r.t}else res=lastRp*Math.exp(-(r.t-lastRpT)/(24*HOUR));
+   if(r0!=null&&last)res+=(r0-rp0)*Math.exp(-(r.t-last.t)/(12*HOUR));v=r.ast+res}
+  if(v!=null){T.push(r.t);V.push((v-nmm)/100)}}
+ const fn=x=>{if(!T.length||x<T[0]||x>T[T.length-1])return null;let lo=0,hi=T.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(T[m]<=x)lo=m;else hi=m}
+  if(T[hi]-T[lo]>2*HOUR)return null;return T[hi]===T[lo]?V[lo]:V[lo]+(V[hi]-V[lo])*(x-T[lo])/(T[hi]-T[lo])};
+ const pts=obsRows.map(r=>({t:r.t,h:(r.obs-nmm)/100,r:r.res!=null?r.res/100:undefined}));
+ return{rows,nmm,last,r0,fn,pts,tEnd:T[T.length-1]}}
+function gaugeFor(sp){if(!S.ep)return null;const k=sp.lat<-27.845?"imbituba":"floripa";const g=S.ep[k]||S.ep.floripa;if(!g)return null;const st=EP_ST[S.ep[k]?k:"floripa"];
+ return{g,st,lag:sp.lag-st.lagRef,amp:sp.amp/st.ampRef}}
 function tideFor(sp){
- const t=S.data.t,B=baseTide(sp);if(!B)return{h:t.map(()=>null),src:"sem dado"};
- const G=S.gfit;
- if(!G)return{h:t.map(B.fn),src:B.src};
- const k=sp.t==="lagoa"?.3:1;
- return{h:t.map(x=>{const v=B.fn(x-G.L*60e3);return v==null?null:G.b*v+k*surgeAt(x)}),src:B.src+" + marégrafo EPAGRI"}}
+ const t=S.data.t,B=baseTide(sp),G=S.gfit,k=sp.t==="lagoa"?.3:1;
+ const model=!B?(()=>null):!G?B.fn:(x=>{const v=B.fn(x-G.L*60e3);return v==null?null:G.b*v+k*surgeAt(x)});
+ const E=S.tideTable&&S.tideTable.length>1?null:gaugeFor(sp);
+ if(E){let n=0;const h=t.map(x=>{const v=E.g.fn(x-E.lag*60e3);if(v!=null){n++;return v*E.amp}return model(x)});
+  if(n)return{h,src:`marégrafo EPAGRI ${E.st.n} (medido + previsão MohidSC)${B?", depois "+B.src:""}`,ep:E}}
+ if(!B)return{h:t.map(()=>null),src:"sem dado"};
+ return{h:t.map(model),src:B.src+(G?" + marégrafo EPAGRI":"")}}
 /* Marégrafo: ajusta atraso (L), fator de altura (b) e referência (a) da previsão contra o medido.
    O que sobra (resíduo) é a maré meteorológica; no futuro ela decai em ~12 h. */
-function fitGauge(){S.gfit=null;S.gObs=null;const G=S.gauge;if(!G||!S.data)return;
+function fitGauge(){S.gfit=null;S.gObs=null;if(!S.data)return;
+ const auto=S.ep&&S.ep.floripa?{pts:S.ep.floripa.pts}:null;let G=S.gauge;
+ if(auto&&auto.pts.length>=8){const autoLast=auto.pts[auto.pts.length-1].t;const manLast=G?Math.max(G.quick?G.quick.t:0,G.pts&&G.pts.length?G.pts[G.pts.length-1].t:0):0;if(manLast<=autoLast)G=auto}
+ if(!G)return;
  const lastPt=G.pts&&G.pts.length?G.pts[G.pts.length-1].t:0;
  if(G.quick&&(!G.pts||G.pts.length<8||G.quick.t>lastPt)){S.gfit={L:0,b:1,a:0,surge:G.quick.r,tLast:G.quick.t,res:[{t:G.quick.t,r:G.quick.r}],hasR:true,quick:true};return}
  if(!G.pts||G.pts.length<8)return;
@@ -499,7 +542,7 @@ function fitGauge(){S.gfit=null;S.gObs=null;const G=S.gauge;if(!G||!S.data)retur
  const last=res[res.length-1],tail=res.filter(x=>x.t>last.t-HOUR);best.surge=tail.reduce((s,x)=>s+x.r,0)/tail.length;best.tLast=last.t;best.res=res;
  const raw=G.pts.map(p=>{const v=B.fn(p.t-best.L*60e3);return v==null?null:best.b*v}).filter(v=>v!=null);
  best.rmseRaw=Math.sqrt(G.pts.reduce((s,p)=>{const v=B.fn(p.t);return v==null?s:s+((p.r!=null?p.h-p.r:p.h)-best.a-v)**2},0)/G.pts.length);
- S.gfit=best;const m=new Map();for(const p of G.pts){const k=Math.round(p.t/HOUR)*HOUR;const e=m.get(k)||[0,0];e[0]+=p.h-best.a;e[1]++;m.set(k,e)}
+ S.gfit=best;const off=G===auto?0:best.a;const m=new Map();for(const p of G.pts){const k=Math.round(p.t/HOUR)*HOUR;const e=m.get(k)||[0,0];e[0]+=p.h-off;e[1]++;m.set(k,e)}
  S.gObs=new Map([...m].map(([k,[s,n]])=>[k,s/n]))}
 function surgeAt(x){const G=S.gfit;if(!G)return 0;const R=G.res;if(x>=G.tLast)return G.surge*Math.exp(-(x-G.tLast)/(12*HOUR));if(x<R[0].t)return 0;
  let k=R.findIndex(p=>p.t>=x);if(k<=0)return R[0].r;const a=R[k-1],b=R[k];if(b.t-a.t>3*HOUR)return 0;return a.r+(b.r-a.r)*(x-a.t)/(b.t-a.t)}
@@ -580,7 +623,7 @@ function computeSpot(sp){const t=S.data.t,n=t.length;
    if(gc!=null&&gc>60)danger=(danger?danger+" e ":"")+"rajadas fortes";
    if(danger)sc=Math.min(sc,2);
    rows.push({i,t:t[i],raw:w,rawModel:raw,all,d,g:gc,exp,eff,wave,hs:o.hs[i],wdir:o.wdir[i],tide:tide.h[i],obs:S.gObs&&(sp.t==="baia"||sp.t==="canal")?S.gObs.get(t[i])??null:null,rate:rate[i],lvl,mov,rising,dp,sol,rf,c,score:clamp(sc,0,10),bonus,danger,sst:o.sst[i],rain:o.rain[i],pres:o.pres[i]})}
-  S.derived[sp.id]={rows,tideSrc:tide.src,ex:tideExtremes(rows)}}}
+  S.derived[sp.id]={rows,tideSrc:tide.src,ep:tide.ep||null,ex:tideExtremes(rows)}}}
 
 /* ================== APRENDIZADO PESSOAL (regressão logística) ================== */
 const FEATS=[["vento","Vento no ponto (fraco)"],["mar","Mar adequado"],["mare","Movimento de maré"],["enchendo","Maré enchendo"],["nivel","Maré alta"],["sol","Sol/lua (períodos)"],["pres","Pressão favorável"],["sizigia","Maré de sizígia"],["noite","Noite"],["agua","Água quente"]];
@@ -618,7 +661,9 @@ function arrow(d,size=14){if(d==null)return"";return`<svg width="${size}" height
 function setStatus(s){$("#status").textContent=s}
 function showBanner(s,w){const b=$("#banner");b.textContent=s;b.hidden=false;b.classList.toggle("warn",!!w)}
 function spot(){return SPOTS.find(s=>s.id===S.spot)||SPOTS[0]}
-function renderAll(){renderModels();renderRank();renderSpot();renderSpecies();renderLog()}
+function renderEpStatus(){const el=$("#epStatus");if(!el)return;const ks=Object.keys(S.ep||{});
+ el.innerHTML=ks.length?"Leitura automática ativa: "+ks.map(k=>{const g=S.ep[k];return`${EP_ST[k].n}${g.last?` (última medição ${fmtDH.format(g.last.t)})`:""}`}).join(" · "):`<span style="color:var(--warn)">Não consegui ler os marégrafos agora. A maré usa o modelo global; dá para informar o resíduo manualmente.</span>`}
+function renderAll(){renderEpStatus();renderModels();renderRank();renderSpot();renderSpecies();renderLog()}
 function renderModels(){const el=$("#modelSeg");el.innerHTML=MODELS.map(m=>`<button type="button" data-m="${m.k}" aria-pressed="${m.k===S.model}">${m.n}</button>`).join("");
  $("#rankModel").textContent="Modelo "+MODELS.find(m=>m.k===S.model).n+(S.ml&&S.ml.ready?" + seu histórico":"")}
 function renderRank(){
@@ -719,7 +764,9 @@ function renderTide(sp,D,r){
  if(prev)h+=` (${rising?"enchente":"vazante"} total de ${dm(next.h-prev.h)}, começou às ${fmtH.format(prev.t)})`;
  h+=`.`;if(r.rate!=null)h+=` Agora ${rising?"subindo":"descendo"} ${Math.round(Math.abs(r.rate)*100)} cm por hora.`;
  if(after)h+=`<br>Depois ${rising?"vaza":"enche"} até <b>${fmtH.format(after.t)}</b> (${cm(after.h)}), ${rising?"descendo":"subindo"} ${dm(after.h-next.h)}.`;
- if(G)h+=`<br><span class="small">Marégrafo EPAGRI: maré meteorológica ${cm(G.surge)} na última medição (${fmtDH.format(G.tLast)}), já somada à previsão${Math.abs(G.surge)>.15?(G.surge>0?". A água está acima do normal":". A água está abaixo do normal"):""}.</span>`;
+ const E=D.ep;
+ if(E&&E.g.last){const L=E.g.last;h+=`<br><span class="small">Marégrafo EPAGRI ${E.st.n}: medido <b>${Math.round(L.obs)} cm</b> às ${fmtH.format(L.t)}${L.res!=null?`, resíduo (maré meteorológica) <b>${L.res>=0?"+":""}${Math.round(L.res)} cm</b>${Math.abs(L.res)>15?(L.res>0?": água acima do normal":": água abaixo do normal"):""}`:""}. Previsão com o modelo MohidSC da EPAGRI até ${fmtDH.format(E.g.tEnd)}.</span>`}
+ else if(G)h+=`<br><span class="small">Marégrafo EPAGRI: maré meteorológica ${cm(G.surge)} na última medição (${fmtDH.format(G.tLast)}), já somada à previsão${Math.abs(G.surge)>.15?(G.surge>0?". A água está acima do normal":". A água está abaixo do normal"):""}.</span>`;
  $("#tideNow").innerHTML=h;
  const rows=D.rows,i0=rows.findIndex(x=>x.t===r.t);
  $("#tideNext").innerHTML=`<thead><tr><th>Hora</th><th>Nível</th><th>Movimento</th></tr></thead><tbody>${rows.slice(i0,i0+13).map(x=>x.tide==null?"":`<tr><td class="num">${fmtH.format(x.t)}</td><td class="num">${cm(x.tide)}</td><td class="num ${x.rate>0?"up":"dn"}">${x.rate==null?"":(x.rate>0?"▲ ":"▼ ")+Math.round(Math.abs(x.rate)*100)+" cm/h"}${x.mov!=null&&x.mov<.2?" · estofo":""}</td></tr>`).join("")}</tbody>`;
