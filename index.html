@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d3b4a">
-<title>Pesqueiro Floripa</title>
+<title>Maré Boa</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -170,7 +170,7 @@ footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <h1 class="brand">Pesqueiro Floripa<small>Vento, mar e maré para pescar na Grande Florianópolis</small></h1>
+  <h1 class="brand">Maré Boa<small>Vento, mar e maré para pescar na Grande Florianópolis</small></h1>
   <div class="grow"></div>
   <div class="seg" id="modelSeg" role="group" aria-label="Modelo de previsão"></div>
   <div class="seg" id="unitSeg" role="group" aria-label="Unidade do vento"><button type="button" data-u="kmh">km/h</button><button type="button" data-u="kn">nós</button><button type="button" data-u="ms">m/s</button></div>
@@ -968,7 +968,7 @@ $("#logForm").addEventListener("submit",e=>{e.preventDefault();const t=parseLoca
  const item={id:Math.random().toString(36).slice(2),t,spot:sp,sp:$("#lgSp").value,res:+$("#lgRes").value,note:$("#lgNote").value,f:r&&!S.demo?featOf(r):null,model:S.model};
  S.log.push(item);store("pf_log",S.log);trainML();applyML();renderAll();
  $("#lgMsg").textContent=item.f?"Salvo com as condições daquela hora.":S.demo?"Salvo sem condições (dados de exemplo não entram no treino).":"Salvo, mas fora do período carregado (7 dias atrás até 7 à frente): não entra no treino."});
-$("#expLog").addEventListener("click",()=>{const blob=new Blob([JSON.stringify({app:"pesqueiro-floripa",v:1,log:S.log},null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="diario-pesca.json";a.click()});
+$("#expLog").addEventListener("click",()=>{const blob=new Blob([JSON.stringify({app:"mare-boa",v:1,log:S.log},null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="diario-pesca.json";a.click()});
 $("#impLog").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());const arr=j.log||j;const ids=new Set(S.log.map(x=>x.id));arr.forEach(x=>{if(x&&x.t&&!ids.has(x.id))S.log.push(x)});store("pf_log",S.log);trainML();applyML();renderAll();$("#lgMsg").textContent="Diário importado."}catch(err){$("#lgMsg").textContent="Arquivo inválido: "+err.message}});
 $("#useCal").checked=S.useCal;$("#useCal").addEventListener("change",e=>{S.useCal=e.target.checked;store("pf_usecal",S.useCal);rebuild();renderAll()});
 
@@ -1103,7 +1103,7 @@ function parsePlaces(txt,name){const out=[];let skipped=0;const t=txt.trim();
   doc.querySelectorAll("Placemark").forEach(pm=>{const c=(pm.querySelector("Point coordinates")||pm.querySelector("coordinates")||{}).textContent;const nm=(pm.querySelector("name")||{}).textContent;
    if(!c){skipped++;return}const [lon,lat]=c.trim().split(/[\s]+/)[0].split(",").map(Number);if(isNaN(lat)||isNaN(lon)){skipped++;return}out.push({n:(nm||"").trim(),lat,lon})})}
  else if(/^[\[{]/.test(t)){const j=JSON.parse(t);
-  if(j.app==="pesqueiro-floripa"&&Array.isArray(j.spots))return{pts:j.spots.map(s=>({...s,full:true})),skipped:0};
+  if((j.app==="mare-boa"||j.app==="pesqueiro-floripa")&&Array.isArray(j.spots))return{pts:j.spots.map(s=>({...s,full:true})),skipped:0};
   const feats=j.features||(Array.isArray(j)?j:[]);
   feats.forEach(f=>{const pr=f.properties||{};let lon=f.geometry&&f.geometry.coordinates?f.geometry.coordinates[0]:null,lat=f.geometry&&f.geometry.coordinates?f.geometry.coordinates[1]:null;
    if(!lat&&!lon){const c=coordFromText(pr.google_maps_url||pr["Google Maps URL"]||JSON.stringify(pr));if(c){lat=c.lat;lon=c.lon}}
@@ -1137,7 +1137,7 @@ async function importPlaces(txt,label){if(importing)return;const msg=$("#myMsg")
 $("#myImport").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;if(/\.kmz$/i.test(f.name)){$("#myMsg").textContent="Arquivo KMZ é compactado. No Meus Mapas, marque \"Exportar como KML\" antes de baixar.";return}importPlaces(await f.text(),f.name);e.target.value=""});
 $("#myPasteBtn").addEventListener("click",()=>importPlaces($("#myPaste").value,"colado"));
 $("#myExport").addEventListener("click",()=>{const L=SPOTS.filter(s=>s.custom&&!s.temp);if(!L.length){$("#myMsg").textContent="Você ainda não tem pontos para exportar.";return}
- const blob=new Blob([JSON.stringify({app:"pesqueiro-floripa",v:1,tipo:"meus-pontos",exportado:new Date().toISOString(),spots:L},null,1)],{type:"application/json"});
+ const blob=new Blob([JSON.stringify({app:"mare-boa",v:1,tipo:"meus-pontos",exportado:new Date().toISOString(),spots:L},null,1)],{type:"application/json"});
  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="meus-pontos-pesca.json";document.body.appendChild(a);a.click();a.remove();$("#myMsg").textContent=`${L.length} pontos exportados em meus-pontos-pesca.json. Guarde em lugar seguro; para restaurar, use "Importar pontos".`});
 function savePin(name){const sp=SPOTS.find(s=>s.temp);if(!sp)return;const id="c"+Date.now().toString(36);
  S.data.spots[id]=S.data.spots[sp.id];S.derived[id]=S.derived[sp.id];delete S.data.spots[sp.id];delete S.derived[sp.id];
