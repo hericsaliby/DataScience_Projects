@@ -147,6 +147,7 @@ summary{cursor:pointer;font-weight:600}
 .phases{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px}
 .phases div{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:13px}
 #moonDays .day svg{display:block;margin:2px auto}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;line-height:1.35;box-shadow:0 2px 8px rgba(0,0,0,.18);white-space:nowrap;z-index:2;font-variant-numeric:tabular-nums}
 footer{font-size:12.5px;color:var(--ink-3);margin-top:24px;max-width:80ch}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -784,7 +785,7 @@ function renderDays(){const rows=S.derived[spot().id].rows;const keys=[...new Se
 /* ---- gráficos SVG compartilhando eixo X ---- */
 let CH={rows:[],x:null};
 function renderCharts(){
- const rows=dayRows();CH.rows=rows;if(!rows.length)return;
+ const rows=dayRows();CH.rows=rows;CH.Y={};if(!rows.length)return;
  const W=Math.max(280,$("#chTide").clientWidth||600),padL=34,padR=8,x=i=>padL+(W-padL-padR)*i/(rows.length-1||1);CH.x=x;CH.W=W;CH.padL=padL;CH.padR=padR;
  const ticks=rows.map((r,i)=>({i,h:localHour(r.t)})).filter(o=>o.h%3===0);
  const xAxis=(h)=>ticks.map(o=>`<text x="${x(o.i)}" y="${h-2}" text-anchor="middle">${String(o.h).padStart(2,"0")}h</text>`).join("");
@@ -803,17 +804,17 @@ function renderCharts(){
   const step=hi-lo>1?.5:.2;const yt=[];for(let v=Math.ceil(lo/step)*step;v<=hi+1e-9;v+=step)yt.push(+v.toFixed(2));
   const area=(()=>{let d="";th.forEach((v,i)=>{if(v==null)return;const y=6+(h-26)*(1-(v-lo)/(hi-lo));d+=(d?"L":"M")+x(i)+" "+y});return d?`<path d="${d}L${x(th.length-1)} ${h-20}L${x(0)} ${h-20}Z" fill="var(--accent)" fill-opacity=".14"/>`:""})();
   const ex=tideExtremes(rows).map(e=>{const fi=(e.t-rows[0].t)/HOUR;if(fi<0||fi>rows.length-1)return"";const y=6+(h-26)*(1-(e.h-lo)/(hi-lo));return`<circle cx="${x(fi)}" cy="${y}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/><text x="${x(fi)}" y="${e.hi?y-8:y+16}" text-anchor="middle" style="fill:var(--ink-2)">${fmtH.format(e.t)}</text>`}).join("");
-  $("#chTide").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${night(h)}${yax(h,lo,hi,yt,v=>v.toFixed(1))}${area}${line(th,h,lo,hi,"var(--accent)",2)}${ob.map((v,i)=>v==null?"":`<circle cx="${x(i)}" cy="${6+(h-26)*(1-(v-lo)/(hi-lo))}" r="3" fill="var(--sand)"/>`).join("")}${ex}${xAxis(h)}${cross(h)}</svg>`}
+  CH.Y.tide={lo,hi,h};$("#chTide").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${night(h)}${yax(h,lo,hi,yt,v=>v.toFixed(1))}${area}${line(th,h,lo,hi,"var(--accent)",2)}${ob.map((v,i)=>v==null?"":`<circle cx="${x(i)}" cy="${6+(h-26)*(1-(v-lo)/(hi-lo))}" r="3" fill="var(--sand)"/>`).join("")}${ex}${xAxis(h)}${cross(h)}<g class="hov"></g></svg><div class="tip" hidden></div>`}
  else $("#chTide").innerHTML=`<p class="small muted">Sem dado de maré para este ponto. Cole uma tábua na seção Dados.</p>`;
  // vento
  {const f=UF(),h=150,vals=rows.flatMap(r=>[...r.all,r.g||0]),mxD=Math.max(...vals)*f,stD=S.unit==="ms"?(mxD>12?5:2):S.unit==="kn"?(mxD>25?10:5):(mxD>50?20:10),hiD=Math.max(stD*2,Math.ceil(mxD/stD)*stD),hi=hiD/f,lo=0,yt=[];for(let v=0;v<=hiD+1e-9;v+=stD)yt.push(v/f);
   const band=(()=>{const up=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.max(...(r.all.length?r.all:[0]))/hi)]),dn=rows.map((r,i)=>[x(i),6+(h-26)*(1-Math.min(...(r.all.length?r.all:[0]))/hi)]).reverse();return`<path d="M${up.map(p=>p.join(" ")).join("L")}L${dn.map(p=>p.join(" ")).join("L")}Z" style="fill:var(--s1)" fill-opacity=".55"/>`})();
   const arrows=rows.map((r,i)=>i%2||r.d==null?"":`<g transform="translate(${x(i)} ${h-8})" style="color:var(--ink-2)">${`<g transform="rotate(${r.d+180})"><path d="M0 -6 L4 4 L0 2 L-4 4 Z" fill="currentColor"/></g>`}</g>`).join("");
-  $("#chWind").innerHTML=`<svg height="${h+6}" viewBox="0 0 ${W} ${h+6}">${night(h)}${yax(h,lo,hi,yt,v=>Math.round(v*f))}${band}${line(rows.map(r=>r.raw),h,lo,hi,"var(--ink-3)",1.5,"4 3")}${line(rows.map(r=>r.eff),h,lo,hi,"var(--accent)",2.5)}${arrows}${cross(h-6)}</svg>`}
+  CH.Y.wind={lo,hi,h};$("#chWind").innerHTML=`<svg height="${h+6}" viewBox="0 0 ${W} ${h+6}">${night(h)}${yax(h,lo,hi,yt,v=>Math.round(v*f))}${band}${line(rows.map(r=>r.raw),h,lo,hi,"var(--ink-3)",1.5,"4 3")}${line(rows.map(r=>r.eff),h,lo,hi,"var(--accent)",2.5)}${arrows}${cross(h-6)}<g class="hov"></g></svg><div class="tip" hidden></div>`}
  // ondas
  {const wv=rows.map(r=>r.wave),vv=wv.filter(v=>v!=null);const h=90;
   if(vv.length){const hi=Math.max(1,Math.ceil(Math.max(...vv)*2)/2),yt=[0,hi/2,hi];
-   $("#chWave").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${yax(h,0,hi,yt,v=>v.toFixed(1))}${line(wv,h,0,hi,"var(--accent)",2)}${xAxis(h)}${cross(h)}</svg>`}
+   CH.Y.wave={lo:0,hi,h};$("#chWave").innerHTML=`<svg height="${h}" viewBox="0 0 ${W} ${h}">${yax(h,0,hi,yt,v=>v.toFixed(1))}${line(wv,h,0,hi,"var(--accent)",2)}${xAxis(h)}${cross(h)}<g class="hov"></g></svg><div class="tip" hidden></div>`}
   else $("#chWave").innerHTML=`<p class="small muted">Sem dado de onda.</p>`}
  // tábua do dia + sol/lua
  const ex=tideExtremes(rows),evs=S.events.filter(e=>dayKey(e.t)===S.day);
@@ -848,7 +849,22 @@ function renderTide(sp,D,r){
  $("#tide7").innerHTML=html+`</tbody></table>`}
 function tideExtremes(rows){const out=[];for(let k=1;k<rows.length-1;k++){const a=rows[k-1].tide,b=rows[k].tide,c=rows[k+1].tide;if(a==null||b==null||c==null)continue;
  if((b>=a&&b>c)||(b<=a&&b<c)){const den=a-2*b+c;const off=den!==0?clamp(.5*(a-c)/den,-.5,.5):0;out.push({t:rows[k].t+off*HOUR,h:b-.25*(a-c)*off,hi:b>=a})}}return out}
-function updateReadout(ci){const r=CH.rows[ci];if(!r)return;const sp=spot();
+function yOf(c,v){const Y=CH.Y[c];return 6+(Y.h-26)*(1-(v-Y.lo)/((Y.hi-Y.lo)||1))}
+function updateHover(ci){const r=CH.rows[ci];if(!r||!CH.x)return;const X=CH.x(ci),hr=`<b class="num">${fmtH.format(r.t)}</b>`;
+ const set=(id,c,pts,html)=>{const el=$(id);if(!el||!CH.Y[c])return;const g=el.querySelector(".hov"),tip=el.querySelector(".tip"),svg=el.querySelector("svg");if(!g||!tip||!svg)return;
+  const ys=pts.filter(p=>p.v!=null).map(p=>({y:yOf(c,p.v),col:p.col}));
+  g.innerHTML=ys.map(p=>`<circle cx="${X}" cy="${p.y}" r="4.5" fill="${p.col}" stroke="var(--surface)" stroke-width="2"/>`).join("");
+  if(!ys.length){tip.hidden=true;return}
+  tip.innerHTML=html;tip.hidden=false;const sc=svg.getBoundingClientRect().width/CH.W,px=X*sc,top=Math.min(...ys.map(p=>p.y))*sc;
+  let left=px+12;if(left+tip.offsetWidth>el.clientWidth)left=px-12-tip.offsetWidth;
+  tip.style.left=Math.max(0,left)+"px";let t=top-tip.offsetHeight-8;if(t<0)t=Math.min(top+12,svg.getBoundingClientRect().height-tip.offsetHeight);tip.style.top=t+"px"};
+ set("#chTide","tide",[{v:r.tide,col:"var(--accent)"},{v:r.obs,col:"var(--sand)"}],
+  `${hr} · <b>${r.tide!=null?cm(r.tide):"–"}</b>${r.rate!=null?` <span class="${r.rate>0?"up":"dn"}">${r.rate>0?"▲ enchendo":"▼ vazando"} ${Math.round(Math.abs(r.rate)*100)} cm/h</span>`:""}${r.obs!=null?`<br><span class="muted">medido: ${cm(r.obs)}</span>`:""}`);
+ set("#chWind","wind",[{v:r.raw,col:"var(--ink-3)"},{v:r.eff,col:"var(--accent)"}],
+  `${hr} · ${r.d!=null?dir16(r.d)+" ":""}<b>${wv(r.raw)} ${WU()}</b><br>no ponto <b>${wv(r.eff)}</b> · rajada ${wv(r.g)}${r.all.length>1&&wv(Math.min(...r.all))!==wv(Math.max(...r.all))?`<br><span class="muted">modelos: ${wv(Math.min(...r.all))}–${wv(Math.max(...r.all))}</span>`:""}`);
+ set("#chWave","wave",[{v:r.wave,col:"var(--accent)"}],
+  `${hr} · onda no ponto <b>${r.wave!=null?r.wave.toFixed(1).replace(".",","):"–"} m</b>${r.hs!=null?`<br><span class="muted">mar aberto ${r.hs.toFixed(1).replace(".",",")} m ${dir16(r.wdir)}</span>`:""}`)}
+function updateReadout(ci){const r=CH.rows[ci];if(!r)return;const sp=spot();updateHover(ci);
  $("#readout").innerHTML=`<b class="num">${fmtDH.format(r.t)}</b> · nota <b class="num">${r.score.toFixed(1)}</b> · vento ${r.d!=null?dir16(r.d):"–"} <span class="num">${r.raw!=null?wv(r.raw):"–"}</span> ${WU()} (no ponto <span class="num">${r.eff!=null?wv(r.eff):"–"}</span>, rajada <span class="num">${r.g!=null?wv(r.g):"–"}</span>) · maré <span class="num">${r.tide!=null?r.tide.toFixed(2):"–"}</span> m ${r.rate!=null?(r.rate>0?"enchendo":"vazando"):""} · onda <span class="num">${r.wave!=null?r.wave.toFixed(1):"–"}</span> m<br><span class="muted">${esc(reasons(r,sp).join(" · "))}</span>`;
  document.querySelectorAll(".chart .xh").forEach(l=>{l.setAttribute("x1",CH.x(ci));l.setAttribute("x2",CH.x(ci))})}
 function renderWindows(){const sp=spot(),rows=S.derived[sp.id].rows,now=Date.now()-HOUR;const fut=rows.filter(r=>r.t>=now);const wins=[];let cur=null;
